@@ -1,16 +1,16 @@
-#include <iostream>
 #include <algorithm>
-#include <memory>
 #include <cmath>
+#include <iostream>
+#include <memory>
+#include <string>
 
 #include <raylib.h>
-
-#define RAYGUI_IMPLEMENTATION
-#include <raygui.h>
 
 #include "farmhorizon/app/app.hpp"
 #include "farmhorizon/geometry/field_mesh.hpp"
 #include "farmhorizon/render/field_renderer.hpp"
+#include "farmhorizon/ui/control_panel.hpp"
+#include "farmhorizon/ui/hud.hpp"
 #include "generation/grid.hpp"
 #include "platform/diagnostics.hpp"
 #include "generation_config.hpp"
@@ -18,17 +18,60 @@
 using namespace generation;
 namespace geo = farmhorizon::geometry;
 
-static std::unique_ptr<Grid> g_grid;
-static GridView g_grid_view;
-static GenConfig g_config;
-static GenConfig g_last_config;
+namespace {
 
-static const geo::IsoProjection g_projection{};
-static farmhorizon::render::FieldRenderer g_renderer;
-static float g_last_time_of_day = -1.0f;
-static int g_preset_idx = 0;
+constexpr Camera2D kDefaultCamera = { .offset = { 540, 140 }, .target = { 0, 0 }, .rotation = 0.0f, .zoom = 1.05f };
+constexpr float kMinZoom = 0.5f;
+constexpr float kMaxZoom = 1.8f;
+constexpr Color kBackground = { 30, 30, 35, 255 };
 
-static Camera2D g_camera = {};
+std::unique_ptr<Grid> g_grid;
+GridView g_grid_view;
+GenConfig g_config;
+GenConfig g_last_config;
+
+const geo::IsoProjection g_projection{};
+farmhorizon::render::FieldRenderer g_renderer;
+farmhorizon::ui::ControlPanel g_panel;
+float g_last_time_of_day = -1.0f;
+
+Camera2D g_camera = kDefaultCamera;
+std::string g_gpu_name;
+
+void rebuild_grid() {
+    const int size = std::max(4, (int)std::round(g_config.field_size));
+    auto grid = Grid::create(size, size);
+    if (!grid.has_value()) {
+        std::cerr << "Failed to allocate Grid\n";
+        return;
+    }
+    g_grid = std::make_unique<Grid>(std::move(grid.value()));
+    populate_field_grid(*g_grid, g_config);
+    g_grid_view = g_grid->view();
+
+    g_last_config = g_config;
+    g_last_time_of_day = -1.0f; // Force mesh rebuild on the next frame
+}
+
+// Must run outside BeginDrawing(): uploading bakes into an off-screen texture.
+void rebuild_mesh() {
+    g_renderer.upload(geo::build_field_mesh(g_grid_view, g_projection,
+                                            geo::Lighting::from_time_of_day(g_config.time_of_day)));
+    g_last_time_of_day = g_config.time_of_day;
+}
+
+/// Pan with mouse drag and zoom with the wheel, unless the UI owns the mouse.
+void update_camera(bool ui_wants_mouse) {
+    if (ui_wants_mouse) return;
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+        const Vector2 delta = GetMouseDelta();
+        g_camera.target.x -= delta.x / g_camera.zoom;
+        g_camera.target.y -= delta.y / g_camera.zoom;
+    }
+    g_camera.zoom = std::clamp(g_camera.zoom + GetMouseWheelMove() * 0.05f, kMinZoom, kMaxZoom);
+}
+
+} // namespace
 
 void farmhorizon::App::set_external_state(
     int field_size, int soil_type, float soil_moisture,
@@ -43,34 +86,13 @@ void farmhorizon::App::set_external_state(
     g_config.harvested_pct = std::clamp(harvested_pct, 0.0f, 100.0f);
 }
 
-void RebuildGrid() {
-    int new_size = std::max(4, (int)std::round(g_config.field_size));
-    auto grid_res = Grid::create(new_size, new_size);
-    if (!grid_res.has_value()) {
-        std::cerr << "Failed to allocate Grid\n";
-        return;
-    }
-    g_grid = std::make_unique<Grid>(std::move(grid_res.value()));
-    populate_field_grid(*g_grid, g_config);
-    g_grid_view = g_grid->view();
-
-    g_last_config = g_config;
-    g_last_time_of_day = -1.0f; // Force mesh rebuild on the next frame
-}
-
-// Must run outside BeginDrawing(): uploading bakes into an off-screen texture.
-void RebuildMeshCache() {
-    g_renderer.upload(geo::build_field_mesh(g_grid_view, g_projection,
-                                            geo::Lighting::from_time_of_day(g_config.time_of_day)));
-    g_last_time_of_day = g_config.time_of_day;
-}
-
 bool farmhorizon::App::init(const char* title, int width, int height) {
     InitWindow(width, height, title);
     if (!IsWindowReady()) return false;
 
-    RebuildGrid();
-    g_camera = { .offset = { 540, 140 }, .target = { 0, 0 }, .rotation = 0.0f, .zoom = 1.05f };
+    g_gpu_name = diagnostics::get_gpu_name(); // Query once, not every frame
+    g_camera = kDefaultCamera;
+    rebuild_grid();
     return true;
 }
 
@@ -80,116 +102,31 @@ void farmhorizon::App::shutdown() {
 }
 
 void farmhorizon::App::frame() {
-    Camera2D& camera = g_camera;
-    {
-        // Check if mouse is over UI
-        int panelWidth = 310;
-        int panelHeight = 405;
-        int panelX = GetScreenWidth() - panelWidth - 20;
-        int panelY = 80;
-        Rectangle uiBounds = { (float)panelX, (float)panelY, (float)panelWidth, (float)panelHeight };
-        bool isMouseOverUI = CheckCollisionPointRec(GetMousePosition(), uiBounds);
+    // 1. Input: the UI gets first claim on the mouse.
+    update_camera(g_panel.wants_mouse());
 
-        if (!isMouseOverUI && (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT))) {
-            Vector2 delta = GetMouseDelta();
-            camera.target.x -= delta.x / camera.zoom;
-            camera.target.y -= delta.y / camera.zoom;
-        }
-        camera.zoom = std::clamp(camera.zoom + GetMouseWheelMove() * 0.05f, 0.5f, 1.8f);
-
-        // Rebuild mesh cache if needed
-        if (g_config.time_of_day != g_last_time_of_day) {
-            RebuildMeshCache();
-        }
-
-        BeginDrawing();
-            ClearBackground({ 30, 30, 35, 255 });
-            
-            g_renderer.draw(camera);
-
-            int soilIdx = (int)std::round(g_config.soil_type);
-            int cropIdx = (int)std::round(g_config.crop_type);
-            int fldSize = (int)std::round(g_config.field_size);
-
-            DrawRectangle(0, 0, GetScreenWidth(), 60, Fade(BLACK, 0.8f));
-            DrawText("FarmHorizon", 20, 10, 20, GOLD);
-            DrawText(
-                TextFormat(
-                    "Renderer: %s | Soil: %s (%.0f%%) | Crop: %s | Ext Yield: %.1f t/ha",
-                    diagnostics::get_gpu_name().c_str(),
-                    get_soil_name(soilIdx),
-                    g_config.soil_moisture,
-                    get_crop_name(cropIdx),
-                    g_config.yield_ext
-                ),
-                20, 35, 14, LIME
-            );
-            DrawFPS(GetScreenWidth() - 80, 10);
-
-            // Top-Right Floating UI Panel
-            DrawRectangle(panelX, panelY, panelWidth, panelHeight, Fade(BLACK, 0.85f));
-
-            GuiSetStyle(DEFAULT, TEXT_SIZE, 16);
-            GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(RAYWHITE));
-            
-            int currY = panelY + 15;
-            DrawText("Zoom", panelX + 15, currY, 16, RAYWHITE);
-            float currentZoom = camera.zoom;
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.2f", currentZoom), &currentZoom, 0.5f, 1.8f);
-            if (currentZoom != camera.zoom) camera.zoom = currentZoom;
-
-            currY += 35;
-            DrawText("Time of Day", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.1f", g_config.time_of_day), &g_config.time_of_day, 6.0f, 18.0f);
-
-            currY += 35;
-            DrawText("Field Size", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%dx%d", fldSize, fldSize), &g_config.field_size, 12.0f, 64.0f);
-
-            currY += 35;
-            DrawText("Soil Type", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", get_soil_name(soilIdx), &g_config.soil_type, 0.0f, 3.0f);
-
-            currY += 35;
-            DrawText("Soil Moist", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.0f%%", g_config.soil_moisture), &g_config.soil_moisture, 10.0f, 60.0f);
-
-            currY += 35;
-            DrawText("Crop Type", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", get_crop_name(cropIdx), &g_config.crop_type, 0.0f, 3.0f);
-
-            currY += 35;
-            DrawText("NDVI Index", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.2f", g_config.ndvi_index), &g_config.ndvi_index, 0.10f, 0.85f);
-
-            Color yieldGreen = { 126, 231, 135, 255 };
-            currY += 35;
-            DrawText("Yield (Ext)", panelX + 15, currY, 16, yieldGreen);
-            GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(yieldGreen));
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.0ft", g_config.yield_ext), &g_config.yield_ext, 10.0f, 70.0f);
-
-            Color harvAmber = { 255, 184, 108, 255 };
-            currY += 35;
-            DrawText("Harvested", panelX + 15, currY, 16, harvAmber);
-            GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(harvAmber));
-            GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.0f%%", g_config.harvested_pct), &g_config.harvested_pct, 0.0f, 100.0f);
-
-            GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(RAYWHITE));
-
-            currY += 36;
-            if (GuiButton({ (float)panelX + 15, (float)currY, 175, 28 }, "Cycle Crop Preset")) {
-                g_preset_idx = (g_preset_idx + 1) % 4;
-                apply_crop_preset(g_config, g_preset_idx);
-            }
-            if (GuiButton({ (float)panelX + 198, (float)currY, 97, 28 }, "Reset View")) {
-                camera.zoom = 1.05f;
-                camera.target = { 0, 0 };
-            }
-
-            if (!g_config.state_equals(g_last_config)) {
-                RebuildGrid();
-            }
-
-        EndDrawing();
+    // 2. Rebuild geometry if lighting or field data changed (outside the draw pass).
+    if (g_config.time_of_day != g_last_time_of_day) {
+        rebuild_mesh();
     }
+
+    BeginDrawing();
+        ClearBackground(kBackground);
+
+        // 3. World pass.
+        g_renderer.draw(g_camera);
+
+        // 4. Screen-space overlay pass.
+        ui::draw_hud(g_config, g_gpu_name.c_str());
+        const ui::PanelResult panel = g_panel.draw(g_config, g_camera.zoom);
+        if (panel.reset_view) {
+            g_camera.zoom = kDefaultCamera.zoom;
+            g_camera.target = kDefaultCamera.target;
+        }
+
+        // Field data edits take effect on the next frame's mesh rebuild.
+        if (!g_config.state_equals(g_last_config)) {
+            rebuild_grid();
+        }
+    EndDrawing();
 }
