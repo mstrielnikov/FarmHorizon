@@ -1,4 +1,8 @@
 WORKSPACE_ROOT := ../..
+include $(WORKSPACE_ROOT)/common.mk
+
+PLATFORM := web
+.DEFAULT_GOAL := all
 
 # ── EMSDK Sandbox ────────────────────────────────
 # All toolchain deps live inside the project directory.
@@ -14,19 +18,18 @@ export EMSDK           := $(EMSDK_DIR)
 
 # ── Compiler ─────────────────────────────────────
 
-CXX      := em++
-CXXFLAGS := -std=c++23 -Wall -Wextra -Wno-missing-field-initializers -Wno-unused-parameter -Os \
-            -I$(WORKSPACE_ROOT)/include \
-            -I$(WORKSPACE_ROOT)/src \
-            -I$(WORKSPACE_ROOT)/raylib-src/src/external \
-            -I$(WORKSPACE_ROOT)/raylib-src/examples/core \
-            -DPLATFORM_WEB
+CXX := em++
+AR  := emar
 
 # ── Raylib (built from source for PLATFORM_WEB) ──
 
-RAYLIB_SRC     := $(WORKSPACE_ROOT)/raylib-src/src
-RAYLIB_INCLUDE := $(RAYLIB_SRC)
-RAYLIB_LIB     := $(RAYLIB_SRC)/libraylib.web.a
+RAYLIB_SRC      := $(WORKSPACE_ROOT)/raylib-src/src
+RAYLIB_LIB      := $(RAYLIB_SRC)/libraylib.web.a
+RAYLIB_INCLUDES := -I$(RAYLIB_SRC) -I$(RAYLIB_SRC)/external -I$(WORKSPACE_ROOT)/raylib-src/examples/core
+
+CXXFLAGS := $(CXXSTD) $(WARNINGS) -Os $(INCLUDES) $(RAYLIB_INCLUDES) -DPLATFORM_WEB
+
+include $(WORKSPACE_ROOT)/lib.mk
 
 # ── Emscripten Linker ────────────────────────────
 
@@ -42,12 +45,14 @@ TARGET  := $(OUT_DIR)/index.html
 
 all: $(TARGET)
 
-$(TARGET): main.cpp $(RAYLIB_LIB)
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -I$(RAYLIB_INCLUDE) $< $(RAYLIB_LIB) $(LDFLAGS) -o $@
+$(TARGET): main.cpp $(LIB) $(RAYLIB_LIB)
+	@mkdir -p $(dir $@) $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(OBJ_DIR)/main.d main.cpp $(LIB) $(RAYLIB_LIB) $(LDFLAGS) -o $@
 	@echo ""
 	@echo "Build complete: $(TARGET)"
 	@echo "Run 'make serve' from project root."
+
+-include $(OBJ_DIR)/main.d
 
 $(RAYLIB_LIB):
 	@echo "Building Raylib for WebAssembly..."
@@ -56,6 +61,7 @@ $(RAYLIB_LIB):
 
 clean:
 	rm -f $(OUT_DIR)/index.html $(OUT_DIR)/index.js $(OUT_DIR)/index.wasm $(OUT_DIR)/index.data
+	rm -rf $(OBJ_DIR)
 
 clean-all: clean
 	$(MAKE) -C $(RAYLIB_SRC) clean 2>/dev/null || true

@@ -1,20 +1,23 @@
 # Master Makefile for FarmHorizon Recursive Build System
 # ──────────────────────────────────────────────────
 # Targets:
-#   make gui        Build native GUI (C++ + Raylib)
-#   make wasm       Build WebAssembly (Emscripten + Raylib)
+#   make gui        Build native GUI (C++ + Raylib)          → bin/FarmHorizon-gui
+#   make wasm       Build WebAssembly (Emscripten + Raylib)  → build-wasm/index.html
 #   make run        Run native GUI
 #   make serve      Build & serve WebAssembly via Bun
 #   make clean      Remove build artifacts
 #   make setup-wasm Bootstrap EMSDK + Python sandbox
+#
+# Both targets link the same platform-agnostic library built from src/
+# (build/native/libfarmhorizon.a and build/web/libfarmhorizon.a).
 
 all: gui
 
 gui:
-	$(MAKE) -C apps/gui
+	$(MAKE) -C apps/native
 
 wasm:
-	$(MAKE) -C apps/wasm
+	$(MAKE) -C apps/web
 
 # ── Run ──────────────────────────────────────────
 
@@ -43,11 +46,11 @@ setup-wasm:
 # ── Clean ────────────────────────────────────────
 
 clean:
-	$(MAKE) -C apps/gui clean
-	$(MAKE) -C apps/wasm clean 2>/dev/null || true
+	$(MAKE) -C apps/native clean
+	$(MAKE) -C apps/web clean 2>/dev/null || true
 	rm -rf bin build
 
 clean-all: clean
-	$(MAKE) -C apps/wasm clean-all 2>/dev/null || true
+	$(MAKE) -C apps/web clean-all 2>/dev/null || true
 
 .PHONY: all gui wasm run serve setup-wasm clean clean-all
