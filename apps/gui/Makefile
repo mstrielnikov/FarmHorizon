@@ -8,7 +8,11 @@ TOOLCHAIN_LIB_DIR := .toolchain/llvm/lib/x86_64-unknown-linux-gnu
 # We use RPATH with $ORIGIN so that the loader can find the toolchain's shared libraries 
 # (like libunwind.so.1) relative to the binary's location in bin/.
 # This makes the build self-contained without needing global LD_LIBRARY_PATH.
+ifneq ($(wildcard $(WORKSPACE_ROOT)/.toolchain/llvm/bin/clang++),)
 LDFLAGS_GUI := -fuse-ld=lld -stdlib=libc++ -Wl,-rpath,'$$ORIGIN/../$(TOOLCHAIN_LIB_DIR)'
+else
+LDFLAGS_GUI :=
+endif
 
 # Raylib paths from vcpkg
 RAYLIB_PATH    := $(WORKSPACE_ROOT)/vcpkg/installed/x64-linux
@@ -20,7 +24,8 @@ GUI_FLAGS := -I$(RAYLIB_INCLUDE) -I$(WORKSPACE_ROOT)/raylib-src/examples/core
 
 # Final Library List
 GUI_LIBS  := -L$(RAYLIB_LIB) -lraylib -lglfw3 \
-             -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXcursor -lXinerama
+             -l:libGL.so.1 -lm -lpthread -ldl -lrt \
+             -l:libX11.so.6 -l:libXrandr.so.2 -l:libXi.so.6 -l:libXcursor.so.1 -l:libXinerama.so.1
 
 TARGET := $(BIN_DIR)/Donjourno-gui
 

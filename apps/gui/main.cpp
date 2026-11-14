@@ -9,11 +9,6 @@
 #define RAYGUI_IMPLEMENTATION
 #include <raygui.h>
 
-#include "generation/pipeline.hpp"
-#include "generation/forest.hpp"
-#include "generation/mountain.hpp"
-#include "generation/hybrid.hpp"
-#include "generation/texture.hpp"
 #include "generation/grid.hpp"
 #include "platform/diagnostics.hpp"
 #include "generation_config.hpp"
@@ -30,7 +25,6 @@ struct CachedTriangle {
     Color c;
 };
 static std::vector<CachedTriangle> g_mesh_cache;
-static float g_last_mesh_res = -1.0f;
 static float g_last_time_of_day = -1.0f;
 
 // Off-screen render texture for terrain (draw once, blit every frame)
@@ -44,29 +38,18 @@ static int g_terrain_rt_w = 0;
 static int g_terrain_rt_h = 0;
 
 void RebuildGrid() {
-    int new_size = (int)g_config.grid_size;
+    int new_size = std::max(4, (int)std::round(g_config.field_size));
     auto grid_res = Grid::create(new_size, new_size);
     if (!grid_res.has_value()) {
         std::cerr << "Failed to allocate Grid\n";
         return;
     }
     g_grid = std::make_unique<Grid>(std::move(grid_res.value()));
+    populate_field_grid(*g_grid, g_config);
     g_grid_view = g_grid->view();
 
-    HybridTerrainGenerator hybrid;
-    hybrid.terrain_coverage = g_config.terrain_coverage;
-    hybrid.peak_height = g_config.peak_height;
-    hybrid.num_droplets = (int)(g_config.erosion_drops * 1000.0f);
-
-    auto pipeline = Pipeline(
-        std::move(hybrid),
-        ForestMaskGenerator{0.6f, 2.0f},
-        ForestPlacementGenerator{g_config.forest_density},
-        TerrainTextureGenerator{}
-    );
-    pipeline.execute(*g_grid);
     g_last_config = g_config;
-    g_last_mesh_res = -1.0f; // Force cache rebuild
+    g_last_time_of_day = -1.0f; // Force cache rebuild
     g_terrain_rt_dirty = true;
 }
 
@@ -76,24 +59,12 @@ Vector3 CalculateNormal(Vector3 p0, Vector3 p1, Vector3 p2);
 void RebuildMeshCache() {
     g_mesh_cache.clear();
 
-    int subdiv = std::max(1, (int)g_config.mesh_resolution);
-    int max_effective_res = 512;
-    if ((int)g_config.grid_size * subdiv > max_effective_res) {
-        subdiv = std::max(1, max_effective_res / (int)g_config.grid_size);
-    }
-
     float sun_theta = (std::clamp(g_config.time_of_day, 6.0f, 18.0f) - 6.0f) / 12.0f * PI;
     Vector3 lightDir = { std::cos(sun_theta), std::cos(sun_theta) * 0.5f, std::sin(sun_theta) };
     lightDir = Vector3Normalize(lightDir);
     float ambient = 0.35f;
 
-    auto Lerp = [](float a, float b, float t) { return a + (b - a) * t; };
-    auto Bilerp = [&](float c00, float c10, float c01, float c11, float u, float v) {
-        return Lerp(Lerp(c00, c10, u), Lerp(c01, c11, u), v);
-    };
-
-    // Pre-allocate memory to avoid multiple allocations (std::vector heap memory, avoids stack overflow)
-    size_t quads = (g_grid_view.height() - 1) * (g_grid_view.width() - 1) * subdiv * subdiv;
+    size_t quads = (g_grid_view.height() - 1) * (g_grid_view.width() - 1);
     g_mesh_cache.reserve(quads * 2);
 
     for (size_t y = 0; y < g_grid_view.height() - 1; ++y) {
@@ -102,77 +73,38 @@ void RebuildMeshCache() {
             const Cell& c10 = g_grid_view(x+1, y);
             const Cell& c01 = g_grid_view(x, y+1);
             const Cell& c11 = g_grid_view(x+1, y+1);
-            
+
             Color baseColor = { c00.r, c00.g, c00.b, 255 };
 
-            for (int v = 0; v < subdiv; ++v) {
-                for (int u = 0; u < subdiv; ++u) {
-                    float uu0 = (float)u / subdiv;
-                    float vv0 = (float)v / subdiv;
-                    float uu1 = (float)(u + 1) / subdiv;
-                    float vv1 = (float)(v + 1) / subdiv;
+            float fx00 = (float)x,     fy00 = (float)y;
+            float fx10 = (float)(x+1), fy10 = (float)y;
+            float fx01 = (float)x,     fy01 = (float)(y+1);
+            float fx11 = (float)(x+1), fy11 = (float)(y+1);
 
-                    float fx00 = x + uu0, fy00 = y + vv0;
-                    float fx10 = x + uu1, fy10 = y + vv0;
-                    float fx01 = x + uu0, fy01 = y + vv1;
-                    float fx11 = x + uu1, fy11 = y + vv1;
+            Vector3 p00 = { fx00, fy00, c00.height * 2.5f };
+            Vector3 p10 = { fx10, fy10, c10.height * 2.5f };
+            Vector3 p01 = { fx01, fy01, c01.height * 2.5f };
+            Vector3 p11 = { fx11, fy11, c11.height * 2.5f };
 
-                    float h00 = Bilerp(c00.height, c10.height, c01.height, c11.height, uu0, vv0);
-                    float h10 = Bilerp(c00.height, c10.height, c01.height, c11.height, uu1, vv0);
-                    float h01 = Bilerp(c00.height, c10.height, c01.height, c11.height, uu0, vv1);
-                    float h11 = Bilerp(c00.height, c10.height, c01.height, c11.height, uu1, vv1);
+            Vector2 s00 = ProjectIso(fx00, fy00, c00.height);
+            Vector2 s10 = ProjectIso(fx10, fy10, c10.height);
+            Vector2 s01 = ProjectIso(fx01, fy01, c01.height);
+            Vector2 s11 = ProjectIso(fx11, fy11, c11.height);
 
-                    float r00 = Bilerp(c00.roughness, c10.roughness, c01.roughness, c11.roughness, uu0, vv0);
-                    float r10 = Bilerp(c00.roughness, c10.roughness, c01.roughness, c11.roughness, uu1, vv0);
-                    float r01 = Bilerp(c00.roughness, c10.roughness, c01.roughness, c11.roughness, uu0, vv1);
-                    float r11 = Bilerp(c00.roughness, c10.roughness, c01.roughness, c11.roughness, uu1, vv1);
+            Vector3 n1 = CalculateNormal(p00, p01, p10);
+            float light1 = std::clamp(Vector3DotProduct(n1, lightDir), 0.0f, 1.0f);
+            float i1 = std::clamp(ambient + light1 * 0.8f, 0.0f, 1.0f);
+            Color col1 = { (unsigned char)(baseColor.r * i1), (unsigned char)(baseColor.g * i1), (unsigned char)(baseColor.b * i1), 255 };
+            g_mesh_cache.push_back({ {s00, s01, s10}, col1 });
 
-                    // Add procedural roughness generated by thermal erosion
-                    auto add_noise = [&](float gx, float gy, float base_h, float base_roughness) {
-                        if (base_roughness <= 0.01f) return base_h;
-                        
-                        // Fast 2D hash for micro-jitter
-                        uint32_t ix = *(uint32_t*)&gx;
-                        uint32_t iy = *(uint32_t*)&gy;
-                        uint32_t hsh = ix * 374761393U + iy * 668265263U;
-                        hsh = (hsh ^ (hsh >> 13)) * 1274126177U;
-                        float jitter = static_cast<float>(hsh & 0x7fffffff) / static_cast<float>(0x7fffffff);
-                        
-                        return base_h + (jitter - 0.5f) * std::clamp(base_h * 1.5f, 0.0f, 1.0f) * base_roughness;
-                    };
-
-                    h00 = add_noise(fx00, fy00, h00, r00);
-                    h10 = add_noise(fx10, fy10, h10, r10);
-                    h01 = add_noise(fx01, fy01, h01, r01);
-                    h11 = add_noise(fx11, fy11, h11, r11);
-
-                    Vector3 p00 = { fx00, fy00, h00 * 2.5f };
-                    Vector3 p10 = { fx10, fy10, h10 * 2.5f };
-                    Vector3 p01 = { fx01, fy01, h01 * 2.5f };
-                    Vector3 p11 = { fx11, fy11, h11 * 2.5f };
-
-                    Vector2 s00 = ProjectIso(fx00, fy00, h00);
-                    Vector2 s10 = ProjectIso(fx10, fy10, h10);
-                    Vector2 s01 = ProjectIso(fx01, fy01, h01);
-                    Vector2 s11 = ProjectIso(fx11, fy11, h11);
-
-                    Vector3 n1 = CalculateNormal(p00, p01, p10);
-                    float light1 = std::clamp(Vector3DotProduct(n1, lightDir), 0.0f, 1.0f);
-                    float i1 = std::clamp(ambient + light1 * 0.8f, 0.0f, 1.0f);
-                    Color col1 = { (unsigned char)(baseColor.r * i1), (unsigned char)(baseColor.g * i1), (unsigned char)(baseColor.b * i1), 255 };
-                    g_mesh_cache.push_back({ {s00, s01, s10}, col1 });
-
-                    Vector3 n2 = CalculateNormal(p10, p01, p11);
-                    float light2 = std::clamp(Vector3DotProduct(n2, lightDir), 0.0f, 1.0f);
-                    float i2 = std::clamp(ambient + light2 * 0.8f, 0.0f, 1.0f);
-                    Color col2 = { (unsigned char)(baseColor.r * i2), (unsigned char)(baseColor.g * i2), (unsigned char)(baseColor.b * i2), 255 };
-                    g_mesh_cache.push_back({ {s01, s11, s10}, col2 });
-                }
-            }
+            Vector3 n2 = CalculateNormal(p10, p01, p11);
+            float light2 = std::clamp(Vector3DotProduct(n2, lightDir), 0.0f, 1.0f);
+            float i2 = std::clamp(ambient + light2 * 0.8f, 0.0f, 1.0f);
+            Color col2 = { (unsigned char)(baseColor.r * i2), (unsigned char)(baseColor.g * i2), (unsigned char)(baseColor.b * i2), 255 };
+            g_mesh_cache.push_back({ {s01, s11, s10}, col2 });
         }
     }
-    
-    g_last_mesh_res = g_config.mesh_resolution;
+
     g_last_time_of_day = g_config.time_of_day;
     g_terrain_rt_dirty = true;
 }
@@ -271,7 +203,7 @@ int main() {
         camera.zoom = std::clamp(camera.zoom + GetMouseWheelMove() * 0.05f, 0.1f, 3.0f);
 
         // Rebuild mesh cache if needed
-        if (g_config.mesh_resolution != g_last_mesh_res || g_config.time_of_day != g_last_time_of_day) {
+        if (g_config.time_of_day != g_last_time_of_day) {
             RebuildMeshCache();
         }
 
@@ -313,37 +245,10 @@ int main() {
             GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.1f", g_config.time_of_day), &g_config.time_of_day, 6.0f, 18.0f);
 
             currY += 35;
-            DrawText("Grid Size", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.0f", g_config.grid_size), &g_config.grid_size, 32.0f, 256.0f);
+            DrawText("Field Size", panelX + 15, currY, 16, RAYWHITE);
+            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.0f", g_config.field_size), &g_config.field_size, 12.0f, 64.0f);
 
-            currY += 35;
-            DrawText("Coverage", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.0f%%", g_config.terrain_coverage * 100.0f), &g_config.terrain_coverage, 0.05f, 1.0f);
-
-            currY += 35;
-            DrawText("Peak Hgt", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.1f", g_config.peak_height), &g_config.peak_height, 1.0f, 8.0f);
-
-            currY += 35;
-            DrawText("Erosion K", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.0fk", g_config.erosion_drops), &g_config.erosion_drops, 10.0f, 200.0f);
-
-            currY += 35;
-            DrawText("Forest Den", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.2f", g_config.forest_density), &g_config.forest_density, 0.0f, 1.0f);
-
-            currY += 35;
-            DrawText("Subdiv Res", panelX + 15, currY, 16, RAYWHITE);
-            GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.0f", g_config.mesh_resolution), &g_config.mesh_resolution, 1.0f, 64.0f);
-
-            currY += 35;
-            if (GuiButton({ (float)panelX + 15, (float)currY, 245, 25 }, "Generate Terrain") ||
-               (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && 
-                (g_config.grid_size != g_last_config.grid_size ||
-                 g_config.terrain_coverage != g_last_config.terrain_coverage ||
-                 g_config.peak_height != g_last_config.peak_height ||
-                 g_config.erosion_drops != g_last_config.erosion_drops ||
-                 g_config.forest_density != g_last_config.forest_density))) {
+            if (!g_config.state_equals(g_last_config)) {
                 RebuildGrid();
             }
 
