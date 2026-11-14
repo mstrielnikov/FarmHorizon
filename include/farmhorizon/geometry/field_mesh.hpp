@@ -18,7 +18,7 @@ struct Lighting {
 
 /// CPU-side scene geometry, ready for any renderer backend.
 struct FieldMesh {
-    std::vector<Triangle> triangles; ///< Painter-ordered, counter-clockwise on screen
+    std::vector<Triangle> triangles; ///< Painter-ordered (back to front), counter-clockwise on screen
     Bounds2 bounds;                  ///< World-pixel bounds of all triangles
     bool has_harvester = false;
     Vec2 harvester_label_anchor;     ///< World-pixel anchor above the harvester cab

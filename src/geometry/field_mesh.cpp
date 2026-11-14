@@ -110,6 +110,8 @@ void emit_skirt(MeshWriter& out, const IsoProjection& proj, const Cell& cell,
 }
 
 void emit_harvester(MeshWriter& out, const IsoProjection& proj, FieldMesh& mesh, float hx, float hy) {
+    // Footprint stays inside its own cell so the back-to-front cell loop keeps a
+    // correct painter's order: crops in front of the harvester are drawn after it.
     constexpr float h_base = 0.06f;
     constexpr float h_top  = 0.48f;
     constexpr Rgba8 cab_top   { 230, 57,  70,  255 };
@@ -117,8 +119,8 @@ void emit_harvester(MeshWriter& out, const IsoProjection& proj, FieldMesh& mesh,
     constexpr Rgba8 cab_right { 145, 32,  42,  255 };
     constexpr Rgba8 header    { 255, 209, 102, 255 };
 
-    const float x0 = hx - 0.08f, x1 = hx + 1.08f;
-    const float y0 = hy - 0.08f, y1 = hy + 1.08f;
+    const float x0 = hx + 0.04f, x1 = hx + 0.96f;
+    const float y0 = hy + 0.04f, y1 = hy + 0.80f;
 
     const Vec2 base01 = proj.project(x0, y1, h_base);
     const Vec2 base11 = proj.project(x1, y1, h_base);
@@ -134,10 +136,10 @@ void emit_harvester(MeshWriter& out, const IsoProjection& proj, FieldMesh& mesh,
 
     // Golden cutter bar along the front of the harvester
     const float hh = h_base + 0.08f;
-    out.quad(proj.project(hx - 0.14f, hy + 0.85f, hh),
-             proj.project(hx + 1.14f, hy + 0.85f, hh),
-             proj.project(hx + 1.14f, hy + 1.15f, hh),
-             proj.project(hx - 0.14f, hy + 1.15f, hh),
+    out.quad(proj.project(hx,        hy + 0.80f, hh),
+             proj.project(hx + 1.0f, hy + 0.80f, hh),
+             proj.project(hx + 1.0f, hy + 1.00f, hh),
+             proj.project(hx,        hy + 1.00f, hh),
              header);
 
     mesh.has_harvester = true;
@@ -156,9 +158,8 @@ FieldMesh build_field_mesh(const generation::GridView& grid,
     mesh.triangles.reserve(n * n * 10);
     MeshWriter out(mesh);
 
-    int harv_x = -1, harv_y = -1;
-
-    // Back-to-front row order doubles as painter's ordering for the isometric view.
+    // Back-to-front row order doubles as painter's ordering for the isometric view,
+    // as long as every object stays within its own cell footprint.
     for (size_t y = 0; y < n; ++y) {
         for (size_t x = 0; x < n; ++x) {
             const Cell& cell = grid(x, y);
@@ -174,9 +175,9 @@ FieldMesh build_field_mesh(const generation::GridView& grid,
 
             switch (cell.role) {
                 case CellRole::HarvesterActive:
-                    harv_x = static_cast<int>(x);
-                    harv_y = static_cast<int>(y);
-                    [[fallthrough]];
+                    emit_stubble(out, projection, cell, fx, fy, lighting.ambient);
+                    emit_harvester(out, projection, mesh, fx, fy);
+                    break;
                 case CellRole::HarvestedStubble:
                     emit_stubble(out, projection, cell, fx, fy, lighting.ambient);
                     break;
@@ -189,10 +190,6 @@ FieldMesh build_field_mesh(const generation::GridView& grid,
 
             emit_skirt(out, projection, cell, fx, fy, furrow, y == n - 1, x == n - 1);
         }
-    }
-
-    if (harv_x >= 0) {
-        emit_harvester(out, projection, mesh, static_cast<float>(harv_x), static_cast<float>(harv_y));
     }
 
     return mesh;
