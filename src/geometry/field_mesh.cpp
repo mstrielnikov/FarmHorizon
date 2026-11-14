@@ -175,6 +175,9 @@ FieldMesh build_field_mesh(const generation::GridView& grid,
 
             switch (cell.role) {
                 case CellRole::HarvesterActive:
+                    // The harvester stands on cut ground: its cell is already stubble.
+                    // Currently fully hidden by the cab (2 overdrawn triangles), kept so
+                    // the cell stays correct if the harvester shrinks, moves or animates.
                     emit_stubble(out, projection, cell, fx, fy, lighting.ambient);
                     emit_harvester(out, projection, mesh, fx, fy);
                     break;
