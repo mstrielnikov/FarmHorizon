@@ -18,4 +18,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Donjourno Web → http://localhost:${server.port}`);
+console.log(`FarmHorizon Web → http://localhost:${server.port}`);

@@ -1,8 +1,7 @@
-# Master Makefile for Donjourno Recursive Build System
+# Master Makefile for FarmHorizon Recursive Build System
 # ──────────────────────────────────────────────────
 # Targets:
-#   make cli        Build native CLI (LLVM C++23)
-#   make gui        Build native GUI (LLVM C++23 + Raylib)
+#   make gui        Build native GUI (C++ + Raylib)
 #   make wasm       Build WebAssembly (Emscripten + Raylib)
 #   make run        Run native GUI
 #   make serve      Build & serve WebAssembly via Bun
@@ -20,7 +19,7 @@ wasm:
 # ── Run ──────────────────────────────────────────
 
 run: gui
-	@./bin/Donjourno-gui
+	@./bin/FarmHorizon-gui
 
 serve: wasm
 	@echo "Serving at http://localhost:8080"

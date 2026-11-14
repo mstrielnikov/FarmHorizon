@@ -346,7 +346,7 @@ void UpdateDrawFrame() {
         int fldSize = (int)std::round(g_config.field_size);
 
         DrawRectangle(0, 0, GetScreenWidth(), 60, Fade(BLACK, 0.8f));
-        DrawText("Donjourno", 20, 10, 20, GOLD);
+        DrawText("FarmHorizon", 20, 10, 20, GOLD);
         DrawText(
             TextFormat(
                 "Renderer: %s | Soil: %s (%.0f%%) | Crop: %s | Ext Yield: %.1f t/ha",
@@ -430,7 +430,7 @@ int main() {
     const int screenWidth = 1200;
     const int screenHeight = 840;
 
-    InitWindow(screenWidth, screenHeight, "Donjourno - Web Edition");
+    InitWindow(screenWidth, screenHeight, "FarmHorizon - Web Edition");
 
     RebuildGrid();
 

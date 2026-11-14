@@ -295,7 +295,7 @@ int main() {
     const int screenHeight = 840;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
-    InitWindow(screenWidth, screenHeight, "Donjourno");
+    InitWindow(screenWidth, screenHeight, "FarmHorizon");
     SetTargetFPS(60);
 
     RebuildGrid();
@@ -347,7 +347,7 @@ int main() {
             int fldSize = (int)std::round(g_config.field_size);
 
             DrawRectangle(0, 0, GetScreenWidth(), 60, Fade(BLACK, 0.8f));
-            DrawText("Donjourno", 20, 10, 20, GOLD);
+            DrawText("FarmHorizon", 20, 10, 20, GOLD);
             DrawText(
                 TextFormat(
                     "Renderer: %s | Soil: %s (%.0f%%) | Crop: %s | Ext Yield: %.1f t/ha",

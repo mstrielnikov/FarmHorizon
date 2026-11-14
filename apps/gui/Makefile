@@ -27,7 +27,7 @@ GUI_LIBS  := -L$(RAYLIB_LIB) -lraylib -lglfw3 \
              -l:libGL.so.1 -lm -lpthread -ldl -lrt \
              -l:libX11.so.6 -l:libXrandr.so.2 -l:libXi.so.6 -l:libXcursor.so.1 -l:libXinerama.so.1
 
-TARGET := $(BIN_DIR)/Donjourno-gui
+TARGET := $(BIN_DIR)/FarmHorizon-gui
 
 all: $(TARGET)
 
