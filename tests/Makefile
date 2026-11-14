@@ -9,7 +9,7 @@ include $(WORKSPACE_ROOT)/native-toolchain.mk
 
 # Only layers that must stay renderer-agnostic are linked here. If one of them
 # starts including raylib, this build breaks — which is the point.
-TESTED_SRCS := $(wildcard $(WORKSPACE_ROOT)/src/geometry/*.cpp)
+TESTED_SRCS := $(wildcard $(WORKSPACE_ROOT)/src/core/*.cpp $(WORKSPACE_ROOT)/src/geometry/*.cpp)
 TEST_SRCS   := $(wildcard *.cpp)
 
 TEST_BIN := $(BUILD_ROOT)/tests/farmhorizon-tests

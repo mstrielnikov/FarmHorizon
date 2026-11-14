@@ -1,28 +1,29 @@
-// Field grid tests: cell roles, boustrophedon harvest order, colour mapping.
+// Field grid tests: cell roles, boustrophedon harvest order, colour mapping, presets.
 #include "test_runner.hpp"
 
-#include "generation/grid.hpp"
+#include "farmhorizon/core/field_grid.hpp"
+#include "farmhorizon/core/presets.hpp"
 
-using namespace generation;
+using namespace farmhorizon::core;
 
 namespace {
 
-Grid make_grid(int n, const GenConfig& cfg) {
-    Grid grid = *Grid::create(n, n);
-    populate_field_grid(grid, cfg);
+FieldGrid make_grid(int n, const FieldState& state) {
+    FieldGrid grid = *FieldGrid::create(static_cast<size_t>(n), static_cast<size_t>(n));
+    populate_field_grid(grid, state);
     return grid;
 }
 
-int count_role(const Grid& grid, CellRole role) {
+int count_role(const FieldGrid& grid, CellRole role) {
     int count = 0;
     for (const Cell& c : grid.cells()) count += (c.role == role);
     return count;
 }
 
-bool find_role(const Grid& grid, CellRole role, int& out_x, int& out_y) {
+bool find_role(const FieldGrid& grid, CellRole role, int& out_x, int& out_y) {
     for (size_t y = 0; y < grid.height(); ++y)
         for (size_t x = 0; x < grid.width(); ++x)
-            if (grid(x, y).role == role) { out_x = (int)x; out_y = (int)y; return true; }
+            if (grid(x, y).role == role) { out_x = static_cast<int>(x); out_y = static_cast<int>(y); return true; }
     return false;
 }
 
@@ -30,7 +31,7 @@ bool find_role(const Grid& grid, CellRole role, int& out_x, int& out_y) {
 
 TEST(border_cells_are_headland) {
     const int n = 22;
-    Grid grid = make_grid(n, GenConfig{});
+    FieldGrid grid = make_grid(n, FieldState{});
     for (int i = 0; i < n; ++i) {
         CHECK(grid(i, 0).role == CellRole::BorderHeadland);
         CHECK(grid(i, n - 1).role == CellRole::BorderHeadland);
@@ -41,32 +42,32 @@ TEST(border_cells_are_headland) {
 }
 
 TEST(harvested_cell_count_matches_percentage) {
-    GenConfig cfg;
-    cfg.harvested_pct = 30.0f;
-    Grid grid = make_grid(22, cfg); // 20x20 interior = 400 plot cells
+    FieldState state;
+    state.harvested_pct = 30.0f;
+    FieldGrid grid = make_grid(22, state); // 20x20 interior = 400 plot cells
     CHECK_EQ(count_role(grid, CellRole::HarvestedStubble), 120);
     CHECK_EQ(count_role(grid, CellRole::HarvesterActive), 1);
     CHECK_EQ(count_role(grid, CellRole::StandingCrop), 400 - 120 - 1);
 }
 
 TEST(no_harvester_when_untouched_or_finished) {
-    GenConfig cfg;
-    cfg.harvested_pct = 0.0f;
-    Grid fresh = make_grid(22, cfg);
+    FieldState state;
+    state.harvested_pct = 0.0f;
+    FieldGrid fresh = make_grid(22, state);
     CHECK_EQ(count_role(fresh, CellRole::HarvesterActive), 0);
     CHECK_EQ(count_role(fresh, CellRole::HarvestedStubble), 0);
 
-    cfg.harvested_pct = 100.0f;
-    Grid done = make_grid(22, cfg);
+    state.harvested_pct = 100.0f;
+    FieldGrid done = make_grid(22, state);
     CHECK_EQ(count_role(done, CellRole::HarvesterActive), 0);
     CHECK_EQ(count_role(done, CellRole::StandingCrop), 0);
     CHECK_EQ(count_role(done, CellRole::HarvestedStubble), 400);
 }
 
 TEST(harvester_starts_even_rows_on_the_left) {
-    GenConfig cfg;
-    cfg.harvested_pct = 30.0f; // 120 cells = 6 full rows -> next row (y=7) is even, starts at x=1
-    Grid grid = make_grid(22, cfg);
+    FieldState state;
+    state.harvested_pct = 30.0f; // 120 cells = 6 full rows -> next row (y=7) is even, starts at x=1
+    FieldGrid grid = make_grid(22, state);
     int hx = -1, hy = -1;
     CHECK(find_role(grid, CellRole::HarvesterActive, hx, hy));
     CHECK_EQ(hx, 1);
@@ -74,9 +75,9 @@ TEST(harvester_starts_even_rows_on_the_left) {
 }
 
 TEST(harvester_reverses_on_odd_rows) {
-    GenConfig cfg;
-    cfg.harvested_pct = 7.5f; // 30 cells: row 0 full (20), row 1 has 10 cut right-to-left
-    Grid grid = make_grid(22, cfg);
+    FieldState state;
+    state.harvested_pct = 7.5f; // 30 cells: row 0 full (20), row 1 has 10 cut right-to-left
+    FieldGrid grid = make_grid(22, state);
     int hx = -1, hy = -1;
     CHECK(find_role(grid, CellRole::HarvesterActive, hx, hy));
     CHECK_EQ(hy, 2);
@@ -87,23 +88,39 @@ TEST(harvester_reverses_on_odd_rows) {
 }
 
 TEST(higher_yield_grows_taller_crops) {
-    GenConfig low, high;
+    FieldState low, high;
     low.harvested_pct = high.harvested_pct = 0.0f;
     low.yield_ext = 15.0f;
     high.yield_ext = 65.0f;
-    Grid a = make_grid(16, low);
-    Grid b = make_grid(16, high);
+    FieldGrid a = make_grid(16, low);
+    FieldGrid b = make_grid(16, high);
     CHECK(b(8, 8).crop_height > a(8, 8).crop_height);
     CHECK(b(8, 8).canopy_density >= a(8, 8).canopy_density);
 }
 
 TEST(wetter_soil_is_darker) {
-    GenConfig dry, wet;
+    FieldState dry, wet;
     dry.soil_moisture = 12.0f;
     wet.soil_moisture = 55.0f;
-    Grid a = make_grid(16, dry);
-    Grid b = make_grid(16, wet);
+    FieldGrid a = make_grid(16, dry);
+    FieldGrid b = make_grid(16, wet);
     // Compare a headland cell, which always shows bare soil.
     CHECK(b(0, 0).r < a(0, 0).r);
     CHECK(b(0, 0).g < a(0, 0).g);
+}
+
+TEST(presets_cycle_typed_crops_and_preserve_field_size) {
+    FieldState state;
+    state.field_size = 36;
+    for (int i = 0; i < kPresetCount; ++i) {
+        apply_crop_preset(state, i);
+        CHECK_EQ(state.field_size, 36);
+        CHECK(state.soil_moisture >= 10.0f && state.soil_moisture <= 60.0f);
+        CHECK(state.ndvi_index >= 0.10f && state.ndvi_index <= 0.85f);
+        CHECK(state.yield_ext >= 10.0f && state.yield_ext <= 70.0f);
+        CHECK(state.harvested_pct >= 0.0f && state.harvested_pct <= 100.0f);
+    }
+    apply_crop_preset(state, 1);
+    CHECK(state.crop_type == CropType::Rice);
+    CHECK(state.soil_type == SoilType::Clay);
 }

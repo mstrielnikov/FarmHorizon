@@ -6,8 +6,8 @@
 
 namespace farmhorizon::geometry {
 
-using generation::Cell;
-using generation::CellRole;
+using core::Cell;
+using core::CellRole;
 
 Lighting Lighting::from_time_of_day(float hours) noexcept {
     const float sun_theta = (std::clamp(hours, 6.0f, 18.0f) - 6.0f) / 12.0f * std::numbers::pi_v<float>;
@@ -148,7 +148,7 @@ void emit_harvester(MeshWriter& out, const IsoProjection& proj, FieldMesh& mesh,
 
 } // namespace
 
-FieldMesh build_field_mesh(const generation::GridView& grid,
+FieldMesh build_field_mesh(const core::FieldGridView& grid,
                            const IsoProjection& projection,
                            const Lighting& lighting) {
     FieldMesh mesh;

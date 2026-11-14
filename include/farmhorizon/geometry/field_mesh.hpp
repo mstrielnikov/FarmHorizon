@@ -2,9 +2,9 @@
 
 #include <vector>
 
+#include "farmhorizon/core/field_grid.hpp"
 #include "farmhorizon/geometry/iso_projection.hpp"
 #include "farmhorizon/geometry/math.hpp"
-#include "generation/grid.hpp"
 
 namespace farmhorizon::geometry {
 
@@ -28,7 +28,7 @@ struct FieldMesh {
  * @brief Builds the isometric field mesh: soil furrows, crop prisms, stubble,
  *        soil skirt and the active harvester. Pure CPU work, no rendering.
  */
-FieldMesh build_field_mesh(const generation::GridView& grid,
+FieldMesh build_field_mesh(const core::FieldGridView& grid,
                            const IsoProjection& projection,
                            const Lighting& lighting);
 
