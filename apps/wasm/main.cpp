@@ -41,6 +41,7 @@ static int g_terrain_rt_w = 0;
 static int g_terrain_rt_h = 0;
 static bool g_has_harvester = false;
 static Vector2 g_harvester_label_pos = {0, 0};
+static int g_preset_idx = 0;
 
 extern "C" EMSCRIPTEN_KEEPALIVE void SetExternalSceneState(
     int field_size, int soil_type, float soil_moisture,
@@ -300,8 +301,8 @@ Vector3 CalculateNormal(Vector3 p0, Vector3 p1, Vector3 p2) {
 }
 
 void UpdateDrawFrame() {
-    int panelWidth = 280;
-    int panelHeight = 360;
+    int panelWidth = 310;
+    int panelHeight = 405;
     int panelX = GetScreenWidth() - panelWidth - 20;
     int panelY = 80;
     Rectangle uiBounds = { (float)panelX, (float)panelY, (float)panelWidth, (float)panelHeight };
@@ -312,7 +313,7 @@ void UpdateDrawFrame() {
         g_camera.target.x -= delta.x / g_camera.zoom;
         g_camera.target.y -= delta.y / g_camera.zoom;
     }
-    g_camera.zoom = std::clamp(g_camera.zoom + GetMouseWheelMove() * 0.05f, 0.1f, 3.0f);
+    g_camera.zoom = std::clamp(g_camera.zoom + GetMouseWheelMove() * 0.05f, 0.5f, 1.8f);
 
     // Rebuild mesh cache if needed (only when params change)
     if (g_config.time_of_day != g_last_time_of_day) {
@@ -340,9 +341,23 @@ void UpdateDrawFrame() {
             }
         EndMode2D();
 
+        int soilIdx = (int)std::round(g_config.soil_type);
+        int cropIdx = (int)std::round(g_config.crop_type);
+        int fldSize = (int)std::round(g_config.field_size);
+
         DrawRectangle(0, 0, GetScreenWidth(), 60, Fade(BLACK, 0.8f));
         DrawText("Donjourno", 20, 10, 20, GOLD);
-        DrawText(TextFormat("Renderer: %s | VRAM: %.1f%%", diagnostics::get_gpu_name().c_str(), diagnostics::get_vram_usage_percent()), 20, 35, 14, LIME);
+        DrawText(
+            TextFormat(
+                "Renderer: %s | Soil: %s (%.0f%%) | Crop: %s | Ext Yield: %.1f t/ha",
+                diagnostics::get_gpu_name().c_str(),
+                get_soil_name(soilIdx),
+                g_config.soil_moisture,
+                get_crop_name(cropIdx),
+                g_config.yield_ext
+            ),
+            20, 35, 14, LIME
+        );
         DrawFPS(GetScreenWidth() - 80, 10);
 
         DrawRectangle(panelX, panelY, panelWidth, panelHeight, Fade(BLACK, 0.85f));
@@ -353,25 +368,59 @@ void UpdateDrawFrame() {
         int currY = panelY + 15;
         DrawText("Zoom", panelX + 15, currY, 16, RAYWHITE);
         float currentZoom = g_camera.zoom;
-        GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.2f", currentZoom), &currentZoom, 0.1f, 3.0f);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.2f", currentZoom), &currentZoom, 0.5f, 1.8f);
         if (currentZoom != g_camera.zoom) g_camera.zoom = currentZoom;
 
         currY += 35;
         DrawText("Time of Day", panelX + 15, currY, 16, RAYWHITE);
-        GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.1f", g_config.time_of_day), &g_config.time_of_day, 6.0f, 18.0f);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.1f", g_config.time_of_day), &g_config.time_of_day, 6.0f, 18.0f);
 
         currY += 35;
         DrawText("Field Size", panelX + 15, currY, 16, RAYWHITE);
-        GuiSliderBar({ (float)panelX + 100, (float)currY - 5, 160, 25 }, "", TextFormat("%.0f", g_config.field_size), &g_config.field_size, 12.0f, 64.0f);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%dx%d", fldSize, fldSize), &g_config.field_size, 12.0f, 64.0f);
+
+        currY += 35;
+        DrawText("Soil Type", panelX + 15, currY, 16, RAYWHITE);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", get_soil_name(soilIdx), &g_config.soil_type, 0.0f, 3.0f);
+
+        currY += 35;
+        DrawText("Soil Moist", panelX + 15, currY, 16, RAYWHITE);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.0f%%", g_config.soil_moisture), &g_config.soil_moisture, 10.0f, 60.0f);
+
+        currY += 35;
+        DrawText("Crop Type", panelX + 15, currY, 16, RAYWHITE);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", get_crop_name(cropIdx), &g_config.crop_type, 0.0f, 3.0f);
+
+        currY += 35;
+        DrawText("NDVI Index", panelX + 15, currY, 16, RAYWHITE);
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.2f", g_config.ndvi_index), &g_config.ndvi_index, 0.10f, 0.85f);
+
+        Color yieldGreen = { 126, 231, 135, 255 };
+        currY += 35;
+        DrawText("Yield (Ext)", panelX + 15, currY, 16, yieldGreen);
+        GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(yieldGreen));
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.0ft", g_config.yield_ext), &g_config.yield_ext, 10.0f, 70.0f);
+
+        Color harvAmber = { 255, 184, 108, 255 };
+        currY += 35;
+        DrawText("Harvested", panelX + 15, currY, 16, harvAmber);
+        GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(harvAmber));
+        GuiSliderBar({ (float)panelX + 110, (float)currY - 3, 140, 22 }, "", TextFormat("%.0f%%", g_config.harvested_pct), &g_config.harvested_pct, 0.0f, 100.0f);
+
+        GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(RAYWHITE));
+
+        currY += 36;
+        if (GuiButton({ (float)panelX + 15, (float)currY, 175, 28 }, "Cycle Crop Preset")) {
+            g_preset_idx = (g_preset_idx + 1) % 4;
+            apply_crop_preset(g_config, g_preset_idx);
+        }
+        if (GuiButton({ (float)panelX + 198, (float)currY, 97, 28 }, "Reset View")) {
+            g_camera.zoom = 1.05f;
+            g_camera.target = { 0, 0 };
+        }
 
         if (!g_config.state_equals(g_last_config)) {
             RebuildGrid();
-        }
-
-        currY += 30;
-        if (GuiButton({ (float)panelX + 15, (float)currY, 245, 25 }, "Reset View")) {
-            g_camera.zoom = 0.5f;
-            g_camera.target = { 0, 0 };
         }
 
     EndDrawing();
@@ -385,7 +434,7 @@ int main() {
 
     RebuildGrid();
 
-    g_camera = { .offset = { 600, 200 }, .target = { 0, 0 }, .rotation = 0.0f, .zoom = 0.5f };
+    g_camera = { .offset = { 540, 140 }, .target = { 0, 0 }, .rotation = 0.0f, .zoom = 1.05f };
 
     emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
 
