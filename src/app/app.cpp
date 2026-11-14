@@ -10,6 +10,7 @@
 
 #include "farmhorizon/app/app.hpp"
 #include "farmhorizon/geometry/field_mesh.hpp"
+#include "farmhorizon/render/field_renderer.hpp"
 #include "generation/grid.hpp"
 #include "platform/diagnostics.hpp"
 #include "generation_config.hpp"
@@ -23,18 +24,8 @@ static GenConfig g_config;
 static GenConfig g_last_config;
 
 static const geo::IsoProjection g_projection{};
-static geo::FieldMesh g_mesh;
+static farmhorizon::render::FieldRenderer g_renderer;
 static float g_last_time_of_day = -1.0f;
-
-// Off-screen render texture for terrain (draw once, blit every frame)
-static RenderTexture2D g_terrain_rt = {};
-static bool g_terrain_rt_dirty = true;
-static Vector2 g_terrain_offset = {0, 0};
-static float g_terrain_world_w = 0.0f;
-static float g_terrain_world_h = 0.0f;
-static float g_terrain_render_scale = 1.0f;
-static int g_terrain_rt_w = 0;
-static int g_terrain_rt_h = 0;
 static int g_preset_idx = 0;
 
 static Camera2D g_camera = {};
@@ -64,56 +55,14 @@ void RebuildGrid() {
     g_grid_view = g_grid->view();
 
     g_last_config = g_config;
-    g_last_time_of_day = -1.0f; // Force cache rebuild
-    g_terrain_rt_dirty = true;
+    g_last_time_of_day = -1.0f; // Force mesh rebuild on the next frame
 }
 
+// Must run outside BeginDrawing(): uploading bakes into an off-screen texture.
 void RebuildMeshCache() {
-    g_mesh = geo::build_field_mesh(g_grid_view, g_projection,
-                                   geo::Lighting::from_time_of_day(g_config.time_of_day));
+    g_renderer.upload(geo::build_field_mesh(g_grid_view, g_projection,
+                                            geo::Lighting::from_time_of_day(g_config.time_of_day)));
     g_last_time_of_day = g_config.time_of_day;
-    g_terrain_rt_dirty = true;
-}
-
-void RebuildTerrainTexture() {
-    const float margin = 16.0f;
-    const float minX = g_mesh.bounds.min.x - margin;
-    const float minY = g_mesh.bounds.min.y - margin;
-    const float real_w = g_mesh.bounds.width()  + 2.0f * margin;
-    const float real_h = g_mesh.bounds.height() + 2.0f * margin;
-
-    const float MAX_RT_SIZE = 8192.0f; 
-    g_terrain_render_scale = 1.0f;
-    if (real_w > MAX_RT_SIZE) g_terrain_render_scale = std::min(g_terrain_render_scale, MAX_RT_SIZE / real_w);
-    if (real_h > MAX_RT_SIZE) g_terrain_render_scale = std::min(g_terrain_render_scale, MAX_RT_SIZE / real_h);
-
-    int rt_w = (int)(real_w * g_terrain_render_scale);
-    int rt_h = (int)(real_h * g_terrain_render_scale);
-
-    if (rt_w != g_terrain_rt_w || rt_h != g_terrain_rt_h) {
-        if (g_terrain_rt.id > 0) UnloadRenderTexture(g_terrain_rt);
-        g_terrain_rt = LoadRenderTexture(rt_w, rt_h);
-        g_terrain_rt_w = rt_w;
-        g_terrain_rt_h = rt_h;
-    }
-
-    g_terrain_offset = { minX, minY };
-    g_terrain_world_w = real_w;
-    g_terrain_world_h = real_h;
-
-    auto toLocal = [&](geo::Vec2 p) -> Vector2 {
-        return { (p.x - minX) * g_terrain_render_scale, (p.y - minY) * g_terrain_render_scale };
-    };
-
-    BeginTextureMode(g_terrain_rt);
-        ClearBackground(BLANK);
-        for (const auto& tri : g_mesh.triangles) {
-            const Color c = { tri.color.r, tri.color.g, tri.color.b, tri.color.a };
-            DrawTriangle(toLocal(tri.p[0]), toLocal(tri.p[1]), toLocal(tri.p[2]), c);
-        }
-    EndTextureMode();
-
-    g_terrain_rt_dirty = false;
 }
 
 bool farmhorizon::App::init(const char* title, int width, int height) {
@@ -126,8 +75,7 @@ bool farmhorizon::App::init(const char* title, int width, int height) {
 }
 
 void farmhorizon::App::shutdown() {
-    if (g_terrain_rt.id > 0) UnloadRenderTexture(g_terrain_rt);
-    g_terrain_rt = {};
+    g_renderer.release();
     CloseWindow();
 }
 
@@ -154,24 +102,10 @@ void farmhorizon::App::frame() {
             RebuildMeshCache();
         }
 
-        // Render terrain to off-screen texture if dirty
-        if (g_terrain_rt_dirty && !g_mesh.triangles.empty()) {
-            RebuildTerrainTexture();
-        }
-
         BeginDrawing();
             ClearBackground({ 30, 30, 35, 255 });
             
-            BeginMode2D(camera);
-                if (g_terrain_rt.id > 0) {
-                    Rectangle src = { 0, 0, (float)g_terrain_rt_w, -(float)g_terrain_rt_h };
-                    Rectangle dst = { g_terrain_offset.x, g_terrain_offset.y, g_terrain_world_w, g_terrain_world_h };
-                    DrawTexturePro(g_terrain_rt.texture, src, dst, {0, 0}, 0.0f, WHITE);
-                }
-                if (g_mesh.has_harvester) {
-                    DrawText("HARVESTER", (int)g_mesh.harvester_label_anchor.x - 36, (int)g_mesh.harvester_label_anchor.y - 10, 14, GOLD);
-                }
-            EndMode2D();
+            g_renderer.draw(camera);
 
             int soilIdx = (int)std::round(g_config.soil_type);
             int cropIdx = (int)std::round(g_config.crop_type);
