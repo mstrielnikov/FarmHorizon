@@ -4,6 +4,7 @@
 #   make gui        Build native GUI (C++ + Raylib)          → bin/FarmHorizon-gui
 #   make wasm       Build WebAssembly (Emscripten + Raylib)  → build-wasm/index.html
 #   make run        Run native GUI
+#   make test       Run headless unit tests (core + geometry, no window needed)
 #   make serve      Build & serve WebAssembly via Bun
 #   make clean      Remove build artifacts
 #   make setup-wasm Bootstrap EMSDK + Python sandbox
@@ -23,6 +24,9 @@ wasm:
 
 run: gui
 	@./bin/FarmHorizon-gui
+
+test:
+	@$(MAKE) --no-print-directory -C tests
 
 serve: wasm
 	@echo "Serving at http://localhost:8080"
@@ -48,9 +52,10 @@ setup-wasm:
 clean:
 	$(MAKE) -C apps/native clean
 	$(MAKE) -C apps/web clean 2>/dev/null || true
+	$(MAKE) -C tests clean
 	rm -rf bin build
 
 clean-all: clean
 	$(MAKE) -C apps/web clean-all 2>/dev/null || true
 
-.PHONY: all gui wasm run serve setup-wasm clean clean-all
+.PHONY: all gui wasm run test serve setup-wasm clean clean-all
