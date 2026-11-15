@@ -54,7 +54,27 @@ LDFLAGS := -s USE_GLFW=3 \
 OUT_DIR := $(WORKSPACE_ROOT)/build-wasm
 TARGET  := $(OUT_DIR)/farmhorizon.js
 
-all: $(TARGET)
+# TypeScript widget wrapper + demo page, bundled with Bun.
+BUN        ?= bun
+WIDGET_TS  := $(wildcard widget/*.ts)
+DEMO_TS    := $(wildcard demo/*.ts)
+WIDGET_JS  := $(OUT_DIR)/farmhorizon-widget.js
+DEMO_JS    := $(OUT_DIR)/demo.js
+DEMO_HTML  := $(OUT_DIR)/index.html
+
+all: $(TARGET) $(WIDGET_JS) $(DEMO_JS) $(DEMO_HTML)
+
+$(WIDGET_JS): $(WIDGET_TS)
+	@mkdir -p $(dir $@)
+	$(BUN) build widget/farmhorizon-widget.ts --target browser --outfile $@
+
+$(DEMO_JS): $(DEMO_TS) $(WIDGET_TS)
+	@mkdir -p $(dir $@)
+	$(BUN) build demo/demo.ts --target browser --outfile $@
+
+$(DEMO_HTML): demo/index.html
+	@mkdir -p $(dir $@)
+	cp $< $@
 
 $(TARGET): main.cpp $(LIB) $(RAYLIB_LIB)
 	@mkdir -p $(dir $@) $(OBJ_DIR)
@@ -72,7 +92,8 @@ $(RAYLIB_LIB):
 
 clean:
 	rm -f $(OUT_DIR)/farmhorizon.js $(OUT_DIR)/farmhorizon.wasm
-	rm -f $(OUT_DIR)/index.html $(OUT_DIR)/index.js $(OUT_DIR)/index.wasm $(OUT_DIR)/index.data
+	rm -f $(WIDGET_JS) $(DEMO_JS) $(DEMO_HTML)
+	rm -f $(OUT_DIR)/index.js $(OUT_DIR)/index.wasm $(OUT_DIR)/index.data
 	rm -rf $(OBJ_DIR)
 
 clean-all: clean

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FarmHorizon — widget demo</title>
+  <style>
+    :root {
+      --bg: #f4f2ec;
+      --card: #ffffff;
+      --ink: #23262b;
+      --muted: #6b6f76;
+      --line: #e3e0d8;
+      --accent: #3f7d4e;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    body { margin: 0; padding: 24px; }
+    header { max-width: 1240px; margin: 0 auto 20px; }
+    header h1 { margin: 0 0 4px; font-size: 22px; }
+    header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    main {
+      max-width: 1240px; margin: 0 auto;
+      display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start;
+    }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+    .card h2 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+    .widget-frame { border-radius: 8px; overflow: hidden; max-width: 100%; }
+    .size-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .size-bar button {
+      border: 1px solid var(--line); background: #faf9f6; border-radius: 6px;
+      padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+    }
+    .size-bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .size-bar .size-label { margin-left: auto; color: var(--muted); font-size: 13px; align-self: center; }
+
+    .controls label { display: block; margin-bottom: 12px; font-size: 13px; }
+    .controls .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .controls output { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .controls input[type="range"], .controls select { width: 100%; }
+    .controls select { padding: 4px; font: inherit; }
+    .controls hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+    .controls .check { display: flex; gap: 8px; align-items: center; }
+
+    pre {
+      margin: 16px 0 0; padding: 12px; background: #faf9f6; border: 1px solid var(--line);
+      border-radius: 6px; font-size: 12px; overflow: auto;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FarmHorizon widget</h1>
+    <p>The WebAssembly scene embedded at a fixed size and driven from the page through <code>FarmHorizonWidget.setState()</code>.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Field scene</h2>
+      <!-- Size comes from data-width / data-height (CSS pixels); the scene fits it. -->
+      <div id="field-widget" class="widget-frame" data-width="720" data-height="420"></div>
+
+      <div class="size-bar" id="size-bar">
+        <button data-w="480" data-h="300">Compact 480×300</button>
+        <button data-w="720" data-h="420" aria-pressed="true">Card 720×420</button>
+        <button data-w="900" data-h="480">Wide 900×480</button>
+        <button data-w="fluid" data-h="420">Fluid 100%×420</button>
+        <span class="size-label" id="size-label"></span>
+      </div>
+
+      <pre id="state-view"></pre>
+    </section>
+
+    <aside class="card controls" id="controls">
+      <h2>External state</h2>
+
+      <label>
+        <div class="row"><span>Field size</span><output data-for="fieldSize"></output></div>
+        <input type="range" name="fieldSize" min="12" max="64" step="1">
+      </label>
+      <label>
+        <div class="row"><span>Soil type</span></div>
+        <select name="soilType"></select>
+      </label>
+      <label>
+        <div class="row"><span>Soil moisture (%)</span><output data-for="soilMoisture"></output></div>
+        <input type="range" name="soilMoisture" min="10" max="60" step="1">
+      </label>
+      <label>
+        <div class="row"><span>Crop type</span></div>
+        <select name="cropType"></select>
+      </label>
+      <label>
+        <div class="row"><span>NDVI</span><output data-for="ndvi"></output></div>
+        <input type="range" name="ndvi" min="0.1" max="0.85" step="0.01">
+      </label>
+      <label>
+        <div class="row"><span>Yield (canopy scale)</span><output data-for="yieldExt"></output></div>
+        <input type="range" name="yieldExt" min="10" max="70" step="1">
+      </label>
+      <label>
+        <div class="row"><span>Harvested (%)</span><output data-for="harvestedPct"></output></div>
+        <input type="range" name="harvestedPct" min="0" max="100" step="1">
+      </label>
+      <label>
+        <div class="row"><span>Time of day (h)</span><output data-for="timeOfDay"></output></div>
+        <input type="range" name="timeOfDay" min="6" max="18" step="0.1">
+      </label>
+
+      <hr>
+      <label class="check"><input type="checkbox" name="showControls"> In-canvas debug panel</label>
+      <label class="check"><input type="checkbox" name="showHud"> In-canvas status bar</label>
+      <label class="check"><input type="color" name="background" value="#1e1e23"> Canvas background</label>
+    </aside>
+  </main>
+
+  <script type="module" src="./demo.js"></script>
+</body>
+</html>

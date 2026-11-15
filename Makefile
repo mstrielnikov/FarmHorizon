@@ -2,10 +2,10 @@
 # ──────────────────────────────────────────────────
 # Targets:
 #   make gui        Build native GUI (C++ + Raylib)          → bin/FarmHorizon-gui
-#   make wasm       Build WebAssembly (Emscripten + Raylib)  → build-wasm/index.html
+#   make wasm       Build the WebAssembly widget + demo page    → build-wasm/ (farmhorizon.js, index.html)
 #   make run        Run native GUI
 #   make test       Run headless unit tests (core + geometry, no window needed)
-#   make serve      Build & serve WebAssembly via Bun
+#   make serve      Build & serve the widget demo via Bun (http://localhost:8080)
 #   make clean      Remove build artifacts
 #   make setup-wasm Bootstrap EMSDK + Python sandbox
 #
