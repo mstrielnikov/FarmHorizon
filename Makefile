@@ -1,13 +1,16 @@
 # Master Makefile for FarmHorizon Recursive Build System
 # ──────────────────────────────────────────────────
 # Targets:
-#   make gui        Build native GUI (C++ + Raylib)          → bin/FarmHorizon-gui
-#   make wasm       Build the WebAssembly widget + demo page    → build-wasm/ (farmhorizon.js, index.html)
-#   make run        Run native GUI
-#   make test       Run headless unit tests (core + geometry, no window needed)
-#   make serve      Build & serve the widget demo via Bun (http://localhost:8080)
-#   make clean      Remove build artifacts
-#   make setup-wasm Bootstrap EMSDK + Python sandbox
+#   make gui         Build native GUI (C++ + Raylib)          → bin/FarmHorizon-gui
+#   make wasm        Build the WebAssembly widget + bundles   → build-wasm/
+#   make run         Run native GUI
+#   make test        Run headless unit tests (core + geometry, no window needed)
+#   make serve       Build & serve the standalone TS demo     (http://localhost:8080)
+#   make marimo      Build & serve the marimo dashboard app   (http://localhost:8080)
+#   make marimo-edit Open the marimo notebook in edit mode    (http://localhost:8080)
+#   make setup-py    Create .venv and install Python dashboard dependencies
+#   make setup-wasm  Bootstrap EMSDK + Python sandbox
+#   make clean       Remove build artifacts
 #
 # Both targets link the same platform-agnostic library built from src/
 # (build/native/libfarmhorizon.a and build/web/libfarmhorizon.a).
@@ -31,6 +34,22 @@ test:
 serve: wasm
 	@echo "Serving at http://localhost:8080"
 	@bun run tools/serve.ts
+
+PY_BOOTSTRAP := $(shell test -x python/bin/python3 && echo python/bin/python3 || echo python3)
+
+setup-py:
+	@test -x .venv/bin/python || $(PY_BOOTSTRAP) -m venv .venv
+	@.venv/bin/pip install -r requirements.txt
+
+marimo: wasm
+	@test -x .venv/bin/marimo || $(MAKE) setup-py
+	@echo "Serving marimo app at http://localhost:8080"
+	@.venv/bin/marimo run apps/dashboard/app.py --port 8080 --headless
+
+marimo-edit: wasm
+	@test -x .venv/bin/marimo || $(MAKE) setup-py
+	@echo "Opening marimo editor at http://localhost:8080"
+	@.venv/bin/marimo edit apps/dashboard/app.py --port 8080 --headless
 
 # ── Wasm Toolchain Bootstrap ─────────────────────
 
@@ -58,4 +77,4 @@ clean:
 clean-all: clean
 	$(MAKE) -C apps/web clean-all 2>/dev/null || true
 
-.PHONY: all gui wasm run test serve setup-wasm clean clean-all
+.PHONY: all gui wasm run test serve setup-py marimo marimo-edit setup-wasm clean clean-all

@@ -1,0 +1,5 @@
+# Python side of FarmHorizon: marimo notebooks / apps hosting the WebAssembly widget.
+# Install with:  make setup-py
+marimo>=0.9
+anywidget>=0.9
+traitlets>=5.9

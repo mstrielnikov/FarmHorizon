@@ -64,6 +64,8 @@ export interface WidgetOptions extends OverlayOptions {
   initialState?: Partial<FieldSceneState>;
   /** URL of the Emscripten module. Defaults to farmhorizon.js next to this script. */
   moduleUrl?: string;
+  /** Already-imported engine factory (e.g. a bundled single-file build); skips `moduleUrl`. */
+  engine?: EngineFactory;
 }
 
 const FALLBACK_SIZE = { width: 640, height: 400 } as const;
@@ -73,8 +75,9 @@ const STYLE_ID = "farmhorizon-widget-style";
 interface EngineModule {
   cwrap(name: string, returnType: null, argTypes: string[]): (...args: number[]) => void;
   pauseMainLoop?: () => void;
+  specialHTMLTargets?: Record<string, unknown>;
 }
-type EngineFactory = (config: Record<string, unknown>) => Promise<EngineModule>;
+export type EngineFactory = (config: Record<string, unknown>) => Promise<EngineModule>;
 
 interface EngineCalls {
   setScene: (...args: number[]) => void;
@@ -102,7 +105,7 @@ export class FarmHorizonWidget {
 
   /** Creates the canvas inside `container`, loads the engine and applies the initial state. */
   static async mount(container: HTMLElement, options: WidgetOptions = {}): Promise<FarmHorizonWidget> {
-    injectStyle();
+    injectStyle(container.getRootNode());
     const size = initialSize(container, options);
 
     const canvas = document.createElement("canvas");
@@ -112,12 +115,16 @@ export class FarmHorizonWidget {
     container.classList.add("farmhorizon-widget");
     container.replaceChildren(canvas);
 
-    const moduleUrl = options.moduleUrl ?? new URL("./farmhorizon.js", import.meta.url).href;
-    const factory = (await import(/* @vite-ignore */ moduleUrl)).default as EngineFactory;
+    const factory = options.engine ?? await importEngine(options.moduleUrl);
     const pixelRatio = window.devicePixelRatio || 1;
     const engine = await factory({
       canvas,
       arguments: [String(size.width), String(size.height), String(pixelRatio)],
+      // Emscripten resolves "#id" with document.querySelector, which cannot see
+      // into shadow roots (marimo, Jupyter widgets); register the canvas directly.
+      preRun: [(m: EngineModule) => {
+        if (m.specialHTMLTargets) m.specialHTMLTargets[`#${canvas.id}`] = canvas;
+      }],
       print: (text: string) => console.debug("[farmhorizon]", text),
       printErr: (text: string) => console.warn("[farmhorizon]", text),
     });
@@ -195,6 +202,7 @@ export class FarmHorizonWidget {
     cancelAnimationFrame(this.#frame);
     this.#observer.disconnect();
     this.#engine.pauseMainLoop?.();
+    delete this.#engine.specialHTMLTargets?.[`#${this.canvas.id}`];
     this.canvas.remove();
   }
 
@@ -216,13 +224,15 @@ export class FarmHorizonWidget {
 
   #syncSize(): void {
     if (this.#destroyed) return;
-    const width = Math.max(1, Math.round(this.container.clientWidth));
-    const height = Math.max(1, Math.round(this.container.clientHeight));
+    injectStyle(this.container.getRootNode());
+    const cw = Math.round(this.container.clientWidth);
+    const ch = Math.round(this.container.clientHeight);
+    if (cw <= 0 || ch <= 0) return;
     const pixelRatio = window.devicePixelRatio || 1;
     const s = this.#size;
-    if (width === s.width && height === s.height && pixelRatio === s.pixelRatio) return;
-    this.#size = { width, height, pixelRatio };
-    this.#calls.setSize(width, height, pixelRatio);
+    if (cw === s.width && ch === s.height && pixelRatio === s.pixelRatio) return;
+    this.#size = { width: cw, height: ch, pixelRatio };
+    this.#calls.setSize(cw, ch, pixelRatio);
   }
 }
 
@@ -253,25 +263,36 @@ function initialSize(container: HTMLElement, options: WidgetOptions): { width: n
   if (height !== undefined) container.style.height = `${height}px`;
 
   // Fall back to a sensible box if the page gave the container no size at all.
-  if (container.clientWidth === 0) container.style.width = `${FALLBACK_SIZE.width}px`;
-  if (container.clientHeight === 0) container.style.height = `${FALLBACK_SIZE.height}px`;
+  if (width === undefined && container.clientWidth === 0) {
+    container.style.width = `${FALLBACK_SIZE.width}px`;
+  }
+  if (height === undefined && container.clientHeight === 0) {
+    container.style.height = `${FALLBACK_SIZE.height}px`;
+  }
   return {
-    width: Math.max(1, Math.round(container.clientWidth)),
-    height: Math.max(1, Math.round(container.clientHeight)),
+    width: Math.max(1, Math.round(container.clientWidth || width || FALLBACK_SIZE.width)),
+    height: Math.max(1, Math.round(container.clientHeight || height || FALLBACK_SIZE.height)),
   };
 }
 
+async function importEngine(moduleUrl?: string): Promise<EngineFactory> {
+  const url = moduleUrl ?? new URL("./farmhorizon.js", import.meta.url).href;
+  return (await import(/* @vite-ignore */ url)).default as EngineFactory;
+}
+
 // Emscripten clears inline canvas width/height on every resize, so the CSS
-// size has to come from a stylesheet rule.
-function injectStyle(): void {
-  if (document.getElementById(STYLE_ID)) return;
+// size has to come from a stylesheet rule. Hosts that render widgets in a
+// shadow root (marimo) need the rule inside that root, not in document.head.
+function injectStyle(root: Node): void {
+  const target = root instanceof ShadowRoot ? root : document.head;
+  if (target.querySelector(`#${STYLE_ID}`)) return;
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
     .farmhorizon-widget { position: relative; overflow: hidden; }
     .farmhorizon-canvas { display: block; width: 100%; height: 100%; outline: none; }
   `;
-  document.head.append(style);
+  target.append(style);
 }
 
 function parseHexColor(color: string): [number, number, number] | null {

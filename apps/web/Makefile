@@ -47,28 +47,34 @@ LDFLAGS := -s USE_GLFW=3 \
            -s EXPORT_NAME=createFarmHorizon \
            -s ENVIRONMENT=web \
            -s EXPORTED_FUNCTIONS=$(WIDGET_EXPORTS) \
-           -s EXPORTED_RUNTIME_METHODS=cwrap,ccall
+           -s EXPORTED_RUNTIME_METHODS=cwrap,ccall,specialHTMLTargets
 
 # ── Output ───────────────────────────────────────
 
-OUT_DIR := $(WORKSPACE_ROOT)/build-wasm
-TARGET  := $(OUT_DIR)/farmhorizon.js
+OUT_DIR      := $(WORKSPACE_ROOT)/build-wasm
+MAIN_OBJ     := $(OBJ_DIR)/main.o
+TARGET       := $(OUT_DIR)/farmhorizon.js
+SINGLE_JS    := $(OUT_DIR)/farmhorizon-single.js
 
-# TypeScript widget wrapper + demo page, bundled with Bun.
-BUN        ?= bun
-WIDGET_TS  := $(wildcard widget/*.ts)
-DEMO_TS    := $(wildcard demo/*.ts)
-WIDGET_JS  := $(OUT_DIR)/farmhorizon-widget.js
-DEMO_JS    := $(OUT_DIR)/demo.js
-DEMO_HTML  := $(OUT_DIR)/index.html
+# TypeScript widget wrapper, anywidget bundle + demo page, bundled with Bun.
+BUN          ?= bun
+DEMO_TS      := $(wildcard demo/*.ts)
+WIDGET_JS    := $(OUT_DIR)/farmhorizon-widget.js
+ANYWIDGET_JS := $(OUT_DIR)/farmhorizon-anywidget.js
+DEMO_JS      := $(OUT_DIR)/demo.js
+DEMO_HTML    := $(OUT_DIR)/index.html
 
-all: $(TARGET) $(WIDGET_JS) $(DEMO_JS) $(DEMO_HTML)
+all: $(TARGET) $(WIDGET_JS) $(ANYWIDGET_JS) $(DEMO_JS) $(DEMO_HTML)
 
-$(WIDGET_JS): $(WIDGET_TS)
+$(WIDGET_JS): widget/farmhorizon-widget.ts
 	@mkdir -p $(dir $@)
 	$(BUN) build widget/farmhorizon-widget.ts --target browser --outfile $@
 
-$(DEMO_JS): $(DEMO_TS) $(WIDGET_TS)
+$(ANYWIDGET_JS): widget/anywidget-entry.ts widget/farmhorizon-widget.ts $(SINGLE_JS)
+	@mkdir -p $(dir $@)
+	$(BUN) build widget/anywidget-entry.ts --target browser --outfile $@
+
+$(DEMO_JS): $(DEMO_TS) widget/farmhorizon-widget.ts
 	@mkdir -p $(dir $@)
 	$(BUN) build demo/demo.ts --target browser --outfile $@
 
@@ -76,12 +82,19 @@ $(DEMO_HTML): demo/index.html
 	@mkdir -p $(dir $@)
 	cp $< $@
 
-$(TARGET): main.cpp $(LIB) $(RAYLIB_LIB)
-	@mkdir -p $(dir $@) $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(OBJ_DIR)/main.d main.cpp $(LIB) $(RAYLIB_LIB) $(LDFLAGS) -o $@
+$(MAIN_OBJ): main.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(TARGET): $(MAIN_OBJ) $(LIB) $(RAYLIB_LIB)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(MAIN_OBJ) $(LIB) $(RAYLIB_LIB) $(LDFLAGS) -o $@
 	@echo ""
 	@echo "Build complete: $(TARGET)"
-	@echo "Run 'make serve' from project root."
+
+$(SINGLE_JS): $(MAIN_OBJ) $(LIB) $(RAYLIB_LIB)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(MAIN_OBJ) $(LIB) $(RAYLIB_LIB) $(LDFLAGS) -s SINGLE_FILE=1 -o $@
 
 -include $(OBJ_DIR)/main.d
 
@@ -91,8 +104,8 @@ $(RAYLIB_LIB):
 	$(MAKE) -C $(RAYLIB_SRC) PLATFORM=PLATFORM_WEB -j$$(nproc)
 
 clean:
-	rm -f $(OUT_DIR)/farmhorizon.js $(OUT_DIR)/farmhorizon.wasm
-	rm -f $(WIDGET_JS) $(DEMO_JS) $(DEMO_HTML)
+	rm -f $(OUT_DIR)/farmhorizon.js $(OUT_DIR)/farmhorizon.wasm $(SINGLE_JS)
+	rm -f $(WIDGET_JS) $(ANYWIDGET_JS) $(DEMO_JS) $(DEMO_HTML)
 	rm -f $(OUT_DIR)/index.js $(OUT_DIR)/index.wasm $(OUT_DIR)/index.data
 	rm -rf $(OBJ_DIR)
 

@@ -1,77 +1,57 @@
-# Prerequisites
-*.d
+# ── Build outputs (C++ native & WebAssembly) ─────
+/bin/
+/build/
+/Build/
+/build-*/
+/build-wasm/
 
-# Compiled Object files
-*.slo
-*.lo
 *.o
 *.obj
-
-# Precompiled Headers
+*.d
 *.gch
 *.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
 *.a
 *.lib
-
-# Executables
+*.so
+*.so.*
+*.dylib
+*.dll
 *.exe
 *.out
 *.app
-
-# Build directories & artifacts
-bin/
-build/
-Build/
-build-*/
-build-wasm/
-
-# Bundled toolchains & SDKs (bootstrapped via make setup-wasm)
-.toolchain/
-vcpkg/
-vcpkg_installed/
-emsdk/
-python/
-raylib-src/
-
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-install_manifest.txt
+*.pdb
+*.dwo
+*.ilk
 compile_commands.json
 
-# Temporary files
+# ── Bootstrapped toolchains & SDKs (make setup-wasm / local SDKs) ──
+/.toolchain/
+/emsdk/
+/python/
+/raylib-src/
+/vcpkg/
+/vcpkg_installed/
+
+# ── Python, marimo & Jupyter ─────────────────────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+__marimo__/
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ── TypeScript / Bun / Node ──────────────────────
+node_modules/
+*.tsbuildinfo
+
+# ── Caches, editor & temporary files ─────────────
+.cache/
+.DS_Store
 *.tmp
 *.log
 *.bak
 *.swp
-
-# vcpkg
-vcpkg_installed/
-
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
