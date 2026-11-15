@@ -42,13 +42,7 @@ Rectangle ControlPanel::bounds() const {
     };
 }
 
-bool ControlPanel::wants_mouse() const {
-    return CheckCollisionPointRec(GetMousePosition(), bounds());
-}
-
-PanelResult ControlPanel::draw(core::FieldState& state, core::ViewSettings& view, float& zoom) {
-    PanelResult result;
-
+void ControlPanel::draw(core::FieldState& state, core::ViewSettings& view) {
     // Keep float slider proxies aligned if state was updated externally.
     if (static_cast<int>(std::lround(size_slider_)) != state.field_size) {
         size_slider_ = static_cast<float>(state.field_size);
@@ -67,7 +61,6 @@ PanelResult ControlPanel::draw(core::FieldState& state, core::ViewSettings& view
     GuiSetStyle(DEFAULT, TEXT_SIZE, kFontSize);
 
     int y = static_cast<int>(r.y) + 15;
-    slider_row(x, y, "Zoom",        TextFormat("%.2f", zoom),                         &zoom,               0.5f,  1.8f);
     slider_row(x, y, "Time of Day", TextFormat("%.1f", view.time_of_day),             &view.time_of_day,   6.0f,  18.0f);
     slider_row(x, y, "Field Size",  TextFormat("%dx%d", state.field_size, state.field_size), &size_slider_, 12.0f, 64.0f);
     slider_row(x, y, "Soil Type",   core::soil_name(state.soil_type),                 &soil_slider_,       0.0f,  3.0f);
@@ -84,17 +77,12 @@ PanelResult ControlPanel::draw(core::FieldState& state, core::ViewSettings& view
     GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(RAYWHITE));
 
     y += 1;
-    if (GuiButton({ static_cast<float>(x + 15), static_cast<float>(y), 175, 28 }, "Cycle Crop Preset")) {
+    if (GuiButton({ static_cast<float>(x + 15), static_cast<float>(y), kWidth - 30, 28 }, "Cycle Crop Preset")) {
         preset_idx_ = (preset_idx_ + 1) % core::kPresetCount;
         core::apply_crop_preset(state, preset_idx_);
         soil_slider_ = static_cast<float>(state.soil_type);
         crop_slider_ = static_cast<float>(state.crop_type);
     }
-    if (GuiButton({ static_cast<float>(x + 198), static_cast<float>(y), 97, 28 }, "Reset View")) {
-        result.reset_view = true;
-    }
-
-    return result;
 }
 
 } // namespace farmhorizon::ui

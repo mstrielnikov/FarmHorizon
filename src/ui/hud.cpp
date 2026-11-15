@@ -5,7 +5,7 @@
 namespace farmhorizon::ui {
 
 void draw_hud(const core::FieldState& state, const char* renderer_name) {
-    DrawRectangle(0, 0, GetScreenWidth(), 60, Fade(BLACK, 0.8f));
+    DrawRectangle(0, 0, GetScreenWidth(), kHudHeight, Fade(BLACK, 0.8f));
     DrawText("FarmHorizon", 20, 10, 20, GOLD);
     DrawText(
         TextFormat(

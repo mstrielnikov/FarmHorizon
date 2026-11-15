@@ -6,11 +6,6 @@
 
 namespace farmhorizon::ui {
 
-/// Requests the panel makes to the app; the panel never touches the camera itself.
-struct PanelResult {
-    bool reset_view = false;
-};
-
 /**
  * @brief Floating top-right parameter panel (immediate-mode, raygui).
  *
@@ -23,14 +18,11 @@ public:
     /// Screen-space rectangle of the panel for the current window size.
     Rectangle bounds() const;
 
-    /// True when the mouse is over the panel, so world input (pan/zoom) should be ignored.
-    bool wants_mouse() const;
-
-    PanelResult draw(core::FieldState& state, core::ViewSettings& view, float& zoom);
+    void draw(core::FieldState& state, core::ViewSettings& view);
 
 private:
     static constexpr int kWidth  = 310;
-    static constexpr int kHeight = 405;
+    static constexpr int kHeight = 345;
     static constexpr int kMargin = 20; ///< Gap to the right window edge
     static constexpr int kTop    = 80; ///< Below the status bar
 

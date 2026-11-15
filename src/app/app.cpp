@@ -4,7 +4,6 @@
 #include <iostream>
 #include <utility>
 
-#include "farmhorizon/geometry/field_mesh.hpp"
 #include "farmhorizon/platform/diagnostics.hpp"
 #include "farmhorizon/ui/hud.hpp"
 
@@ -12,15 +11,10 @@ namespace farmhorizon {
 
 namespace {
 
-constexpr Camera2D kDefaultCamera = {
-    .offset   = { 540, 140 },
-    .target   = { 0, 0 },
-    .rotation = 0.0f,
-    .zoom     = 1.05f
-};
-constexpr float kMinZoom = 0.5f;
-constexpr float kMaxZoom = 1.8f;
-constexpr Color kBackground = { 30, 30, 35, 255 };
+constexpr Color kBackground   = { 30, 30, 35, 255 };
+constexpr float kFitPadding   = 16.0f;  ///< Pixels kept free around the fitted field
+constexpr float kPanelGap     = 12.0f;  ///< Gap between the field and the control panel
+constexpr float kMinSceneWidth = 240.0f; ///< Below this, let the panel overlay the field instead
 
 } // namespace
 
@@ -42,7 +36,6 @@ bool App::init(const char* title, int width, int height) {
     if (!IsWindowReady()) return false;
 
     gpu_name_ = platform::get_gpu_name(); // Query once, not every frame
-    camera_ = kDefaultCamera;
     rebuild_grid();
     return true;
 }
@@ -53,30 +46,27 @@ void App::shutdown() {
 }
 
 void App::frame() {
-    // 1. Input: the UI gets first claim on the mouse.
-    update_camera(panel_.wants_mouse());
-
-    // 2. Rebuild grid and/or off-screen mesh outside BeginDrawing() when dirty.
+    // 1. Rebuild grid, mesh and baked texture outside BeginDrawing() when dirty.
     if (!grid_ || !state_.approx_equals(last_state_)) {
         rebuild_grid();
     }
     if (view_.time_of_day != last_time_of_day_) {
         rebuild_mesh();
     }
+    const geometry::Viewport viewport = scene_viewport();
+    if (!(viewport == baked_viewport_)) {
+        bake(viewport);
+    }
 
     BeginDrawing();
         ClearBackground(kBackground);
 
-        // 3. World pass.
-        renderer_.draw(camera_);
+        // 2. World pass (already fitted to the viewport).
+        renderer_.draw();
 
-        // 4. Screen-space overlay pass.
+        // 3. Screen-space overlay pass. Field edits take effect on the next frame.
         ui::draw_hud(state_, gpu_name_.c_str());
-        const ui::PanelResult panel = panel_.draw(state_, view_, camera_.zoom);
-        if (panel.reset_view) {
-            camera_.zoom   = kDefaultCamera.zoom;
-            camera_.target = kDefaultCamera.target;
-        }
+        panel_.draw(state_, view_);
     EndDrawing();
 }
 
@@ -92,26 +82,35 @@ void App::rebuild_grid() {
     grid_view_ = grid_->view();
 
     last_state_ = state_;
-    last_time_of_day_ = -1.0f; // Force mesh bake before drawing
+    last_time_of_day_ = -1.0f; // Force a mesh rebuild before drawing
 }
 
 void App::rebuild_mesh() {
-    renderer_.upload(geometry::build_field_mesh(
+    mesh_ = geometry::build_field_mesh(
         grid_view_,
         projection_,
         geometry::Lighting::from_time_of_day(view_.time_of_day)
-    ));
+    );
     last_time_of_day_ = view_.time_of_day;
+    baked_viewport_ = {}; // Force a re-bake: the bounds may have changed
 }
 
-void App::update_camera(bool ui_wants_mouse) {
-    if (ui_wants_mouse) return;
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-        const Vector2 delta = GetMouseDelta();
-        camera_.target.x -= delta.x / camera_.zoom;
-        camera_.target.y -= delta.y / camera_.zoom;
-    }
-    camera_.zoom = std::clamp(camera_.zoom + GetMouseWheelMove() * 0.05f, kMinZoom, kMaxZoom);
+// Must run outside BeginDrawing(): baking renders into an off-screen texture.
+void App::bake(const geometry::Viewport& viewport) {
+    renderer_.upload(mesh_, geometry::fit_bounds(mesh_.bounds, viewport, kFitPadding));
+    baked_viewport_ = viewport;
+}
+
+/// Free screen area for the field: below the status bar, left of the panel.
+geometry::Viewport App::scene_viewport() const {
+    const float screen_w = static_cast<float>(GetScreenWidth());
+    const float screen_h = static_cast<float>(GetScreenHeight());
+    const float top = static_cast<float>(ui::kHudHeight);
+
+    float right = panel_.bounds().x - kPanelGap;
+    if (right < kMinSceneWidth) right = screen_w;
+
+    return { 0.0f, top, right, std::max(0.0f, screen_h - top) };
 }
 
 } // namespace farmhorizon

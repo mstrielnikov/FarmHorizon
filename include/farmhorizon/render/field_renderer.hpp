@@ -3,15 +3,17 @@
 #include <raylib.h>
 
 #include "farmhorizon/geometry/field_mesh.hpp"
+#include "farmhorizon/geometry/view_fit.hpp"
 
 namespace farmhorizon::render {
 
 /**
  * @brief Draws a FieldMesh with raylib.
  *
- * The mesh is baked once into an off-screen RenderTexture (upload) and then
- * blitted every frame with a single textured quad (draw). Owns no scene state:
- * it only turns geometry into pixels.
+ * The mesh is baked once into an off-screen RenderTexture (upload) at the
+ * fitted screen scale, then blitted 1:1 every frame with a single textured
+ * quad (draw), so the field stays crisp at any widget size. Owns no scene
+ * state: it only turns geometry into pixels.
  *
  * GPU resources must be freed with release() while the window is still open;
  * the destructor deliberately does not touch the GL context.
@@ -22,11 +24,12 @@ public:
     FieldRenderer(const FieldRenderer&) = delete;
     FieldRenderer& operator=(const FieldRenderer&) = delete;
 
-    /// Bakes the mesh into the off-screen texture. Call outside BeginDrawing().
-    void upload(const geometry::FieldMesh& mesh);
+    /// Bakes the mesh as it appears under `fit`. Call outside BeginDrawing().
+    void upload(const geometry::FieldMesh& mesh, const geometry::ViewFit& fit);
 
-    /// Draws the baked field and world-space labels through the given camera.
-    void draw(const Camera2D& camera) const;
+    /// Draws the baked field and the harvester label in screen space.
+    /// `ui_scale` scales label text (e.g. the device pixel ratio).
+    void draw(float ui_scale = 1.0f) const;
 
     /// Frees the render texture. Call before CloseWindow().
     void release();
@@ -34,15 +37,15 @@ public:
     bool ready() const noexcept { return target_.id > 0; }
 
 private:
-    static constexpr float kMargin      = 16.0f;   ///< Padding around the mesh bounds, in world pixels
-    static constexpr float kMaxTexture  = 8192.0f; ///< Safe texture limit for most GPUs / WebGL2
+    static constexpr float kMaxTexture = 8192.0f; ///< Safe texture limit for most GPUs / WebGL2
+    static constexpr int   kBleed      = 1;       ///< Extra texels around the mesh so edges are not clipped
 
     RenderTexture2D target_{};
     int tex_w_ = 0;
     int tex_h_ = 0;
-    Rectangle world_rect_{};       ///< Where the texture lands in world space
+    Rectangle screen_rect_{};      ///< Where the texture lands on screen
     bool has_label_ = false;
-    Vector2 label_anchor_{};
+    Vector2 label_anchor_{};       ///< Screen-space anchor above the harvester cab
 };
 
 } // namespace farmhorizon::render
