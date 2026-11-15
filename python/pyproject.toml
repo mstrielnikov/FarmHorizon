@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "farmhorizon"
+version = "0.1.0"
+description = "FarmHorizon marimo dashboard, WebAssembly anywidget wrapper, and yield decision pipeline."
+requires-python = ">=3.11"
+dependencies = [
+    "marimo>=0.9",
+    "anywidget>=0.9",
+    "traitlets>=5.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["farmhorizon*"]

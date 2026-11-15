@@ -1,9 +1,7 @@
-# ── Build outputs (C++ native & WebAssembly) ─────
-/bin/
+# ── Build outputs (C++ native, WebAssembly & TS bundles) ──
 /build/
-/Build/
+/bin/
 /build-*/
-/build-wasm/
 
 *.o
 *.obj
@@ -26,11 +24,10 @@ compile_commands.json
 
 # ── Bootstrapped toolchains & SDKs (make setup-wasm / local SDKs) ──
 /.toolchain/
-/emsdk/
-/python/
-/raylib-src/
-/vcpkg/
-/vcpkg_installed/
+
+# ── Generated data pipeline outputs ──────────────
+/data/outputs/*
+!/data/outputs/.gitkeep
 
 # ── Python, marimo & Jupyter ─────────────────────
 .venv/

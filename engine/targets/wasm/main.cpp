@@ -1,6 +1,6 @@
 // FarmHorizon — WebAssembly widget entry point.
 // Owns the browser loop driver and the C exports called from the page (see
-// apps/web/widget/farmhorizon-widget.ts). Sizes are in CSS pixels.
+// web/widget/farmhorizon-widget.ts). Sizes are in CSS pixels.
 #include <algorithm>
 #include <cstdlib>
 

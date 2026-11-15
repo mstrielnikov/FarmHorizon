@@ -43,7 +43,7 @@ _SNAKE_TO_CAMEL: dict[str, str] = {
 }
 
 _BUNDLE_PATH = (
-    Path(__file__).resolve().parents[2] / "build-wasm" / "farmhorizon-anywidget.js"
+    Path(__file__).resolve().parents[3] / "build" / "wasm" / "farmhorizon-anywidget.js"
 )
 
 

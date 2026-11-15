@@ -1,80 +1,92 @@
-# Master Makefile for FarmHorizon Recursive Build System
-# ──────────────────────────────────────────────────
-# Targets:
-#   make gui         Build native GUI (C++ + Raylib)          → bin/FarmHorizon-gui
-#   make wasm        Build the WebAssembly widget + bundles   → build-wasm/
-#   make run         Run native GUI
-#   make test        Run headless unit tests (core + geometry, no window needed)
-#   make serve       Build & serve the standalone TS demo     (http://localhost:8080)
-#   make marimo      Build & serve the marimo dashboard app   (http://localhost:8080)
-#   make marimo-edit Open the marimo notebook in edit mode    (http://localhost:8080)
-#   make setup-py    Create .venv and install Python dashboard dependencies
-#   make setup-wasm  Bootstrap EMSDK + Python sandbox
-#   make clean       Remove build artifacts
+# FarmHorizon — Multi-Language Workspace Makefile
+# ──────────────────────────────────────────────────────────────────────────────
+# Layout:
+#   data/       Input CSV datasets (data/inputs/) & pipeline outputs (data/outputs/)
+#   engine/     C++20 isometric field renderer (native Raylib + Emscripten Wasm)
+#   web/        TypeScript widget SDK, anywidget bundle, demo & Bun dev server
+#   python/     marimo dashboard app, farmhorizon package, notebooks & tests
+#   .toolchain/ Local bootstrapped SDKs (emsdk, standalone python, raylib, vcpkg)
+#   build/      All compiled/bundled build artifacts
 #
-# Both targets link the same platform-agnostic library built from src/
-# (build/native/libfarmhorizon.a and build/web/libfarmhorizon.a).
+# Targets:
+#   make gui          Build native desktop GUI           → build/bin/FarmHorizon-gui
+#   make wasm         Build Wasm engine + TS/anywidget   → build/wasm/
+#   make run          Build & run native desktop GUI
+#   make test         Run C++ headless tests + marimo static check
+#   make serve        Build & serve standalone web demo  (http://localhost:8080)
+#   make marimo       Build & serve marimo dashboard     (http://localhost:8080)
+#   make marimo-edit  Open marimo dashboard in edit mode (http://localhost:8080)
+#   make setup-py     Create python/.venv & install editable farmhorizon package
+#   make setup-wasm   Bootstrap .toolchain/{emsdk,python,raylib-src}
+#   make clean        Remove build artifacts
 
-all: gui
+.DEFAULT_GOAL := gui
+
+PY_VENV      := python/.venv
+PY_BOOTSTRAP := $(shell test -x .toolchain/python/bin/python3 && echo .toolchain/python/bin/python3 || echo python3)
+
+# ── Build ────────────────────────────────────────
 
 gui:
-	$(MAKE) -C apps/native
+	$(MAKE) -C engine native
 
 wasm:
-	$(MAKE) -C apps/web
+	$(MAKE) -C engine wasm
+	$(MAKE) -C web
 
-# ── Run ──────────────────────────────────────────
+# ── Run & Serve ──────────────────────────────────
 
 run: gui
-	@./bin/FarmHorizon-gui
-
-test:
-	@$(MAKE) --no-print-directory -C tests
+	@./build/bin/FarmHorizon-gui
 
 serve: wasm
-	@echo "Serving at http://localhost:8080"
-	@bun run tools/serve.ts
-
-PY_BOOTSTRAP := $(shell test -x python/bin/python3 && echo python/bin/python3 || echo python3)
-
-setup-py:
-	@test -x .venv/bin/python || $(PY_BOOTSTRAP) -m venv .venv
-	@.venv/bin/pip install -r requirements.txt
+	@$(MAKE) --no-print-directory -C web serve
 
 marimo: wasm
-	@test -x .venv/bin/marimo || $(MAKE) setup-py
+	@test -x $(PY_VENV)/bin/marimo || $(MAKE) setup-py
 	@echo "Serving marimo app at http://localhost:8080"
-	@.venv/bin/marimo run apps/dashboard/app.py --port 8080 --headless
+	@$(PY_VENV)/bin/marimo run python/app.py --port 8080 --headless
 
 marimo-edit: wasm
-	@test -x .venv/bin/marimo || $(MAKE) setup-py
+	@test -x $(PY_VENV)/bin/marimo || $(MAKE) setup-py
 	@echo "Opening marimo editor at http://localhost:8080"
-	@.venv/bin/marimo edit apps/dashboard/app.py --port 8080 --headless
+	@$(PY_VENV)/bin/marimo edit python/app.py --port 8080 --headless
 
-# ── Wasm Toolchain Bootstrap ─────────────────────
+# ── Test ─────────────────────────────────────────
+
+test:
+	@$(MAKE) --no-print-directory -C engine test
+	@if [ -x $(PY_VENV)/bin/marimo ]; then $(PY_VENV)/bin/marimo check python/app.py; fi
+
+# ── Environment Bootstrap ────────────────────────
+
+setup-py:
+	@test -x $(PY_VENV)/bin/python || $(PY_BOOTSTRAP) -m venv $(PY_VENV)
+	@$(PY_VENV)/bin/pip install -e ./python
 
 setup-wasm:
-	@echo "=== Setting up EMSDK sandbox ==="
-	@test -d emsdk || git clone https://github.com/emscripten-core/emsdk.git emsdk
-	@cd emsdk && ./emsdk install latest && ./emsdk activate latest
-	@echo "=== Fetching standalone Python 3.11 ==="
-	@test -d python || ( \
-		curl -sL https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9+20240415-x86_64-unknown-linux-gnu-install_only.tar.gz | tar xz && \
-		ln -sf python3.11 python/bin/python3 \
+	@mkdir -p .toolchain
+	@echo "=== Setting up EMSDK sandbox (.toolchain/emsdk) ==="
+	@test -d .toolchain/emsdk || git clone https://github.com/emscripten-core/emsdk.git .toolchain/emsdk
+	@cd .toolchain/emsdk && ./emsdk install latest && ./emsdk activate latest
+	@echo "=== Fetching standalone Python 3.11 (.toolchain/python) ==="
+	@test -d .toolchain/python || ( \
+		mkdir -p .toolchain && \
+		curl -sL https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.11.9+20240415-x86_64-unknown-linux-gnu-install_only.tar.gz | tar xz -C .toolchain && \
+		ln -sf python3.11 .toolchain/python/bin/python3 \
 	)
-	@echo "=== Fetching Raylib source ==="
-	@test -d raylib-src || git clone --depth 1 https://github.com/raysan5/raylib.git raylib-src
+	@echo "=== Fetching Raylib source (.toolchain/raylib-src) ==="
+	@test -d .toolchain/raylib-src || git clone --depth 1 https://github.com/raysan5/raylib.git .toolchain/raylib-src
 	@echo "Done. Run 'make wasm' to build."
 
 # ── Clean ────────────────────────────────────────
 
 clean:
-	$(MAKE) -C apps/native clean
-	$(MAKE) -C apps/web clean 2>/dev/null || true
-	$(MAKE) -C tests clean
-	rm -rf bin build
+	$(MAKE) -C engine clean
+	$(MAKE) -C web clean
+	rm -rf build
 
 clean-all: clean
-	$(MAKE) -C apps/web clean-all 2>/dev/null || true
+	$(MAKE) -C engine clean-all
 
-.PHONY: all gui wasm run test serve setup-py marimo marimo-edit setup-wasm clean clean-all
+.PHONY: gui wasm run serve marimo marimo-edit test setup-py setup-wasm clean clean-all

@@ -6,16 +6,9 @@ app = marimo.App(width="full", app_title="FarmHorizon — Field Scene Widget")
 
 @app.cell
 def _():
-    import sys
-    from pathlib import Path
-
     import marimo as mo
 
-    _dashboard_dir = str(Path(__file__).resolve().parent)
-    if _dashboard_dir not in sys.path:
-        sys.path.insert(0, _dashboard_dir)
-
-    from widget import (
+    from farmhorizon import (
         CROP_TYPES,
         DEFAULT_SCENE_STATE,
         SOIL_TYPES,

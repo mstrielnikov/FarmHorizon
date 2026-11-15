@@ -71,7 +71,7 @@ export interface WidgetOptions extends OverlayOptions {
 const FALLBACK_SIZE = { width: 640, height: 400 } as const;
 const STYLE_ID = "farmhorizon-widget-style";
 
-// Minimal view of the Emscripten module produced by apps/web/Makefile.
+// Minimal view of the Emscripten module produced by engine/targets/wasm/Makefile.
 interface EngineModule {
   cwrap(name: string, returnType: null, argTypes: string[]): (...args: number[]) => void;
   pauseMainLoop?: () => void;

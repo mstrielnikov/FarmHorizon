@@ -5,7 +5,7 @@ The renderer is stateless,acting only as a visualization loop with no simulation
 
 ## The model
 
-The source dataset [yield_prediction_dataset-selected-columns.csv](./yield_prediction_dataset_raw.csv)
+The source dataset [yield_prediction_dataset_raw.csv](./data/inputs/yield_prediction_dataset_raw.csv)
 
 ...
 
@@ -15,7 +15,7 @@ The source dataset [yield_prediction_dataset-selected-columns.csv](./yield_predi
 
 ## Scene renderer
 
-### 1. Field Grid (`include/generation/grid.hpp`)
+### 1. Field Grid (`engine/include/farmhorizon/core/field_grid.hpp`)
 
 The `Grid` stores a flat $N \times N$ array of `Cell` structures representing the parcel's visual state:
 
@@ -24,7 +24,7 @@ The `Grid` stores a flat $N \times N$ array of `Cell` structures representing th
 - `crop_height` & `canopy_density`: Extruded 3D crop canopy dimensions scaled by externally supplied `yield_ext` and `ndvi_index`.
 - `r, g, b` & `crop_r, crop_g, crop_b`: Soil bed and crop canopy RGB colors mapped from `SoilType`, `soil_moisture`, `CropType`, and `ndvi_index`.
 
-### 2. Scene Parameters (`include/generation_config.hpp`)
+### 2. Scene Parameters (`engine/include/farmhorizon/core/field_state.hpp`)
 
 `GenConfig` (`SceneConfig`) holds the externally controlled parameters exposed in the floating Raygui panel and via the C/WebAssembly bridge `SetExternalSceneState(...)`:
 
@@ -40,19 +40,21 @@ The `Grid` stores a flat $N \times N$ array of `Cell` structures representing th
 
 ```bash
 make gui
-make run # Runs ./bin/FarmHorizon-gui
+make run # Runs ./build/bin/FarmHorizon-gui
 ```
 
-**WebAssembly:**
+**WebAssembly & Dashboard:**
 
 ```bash
 make wasm
-make serve # Hosts build-wasm/ at http://localhost:8080
+make serve       # Standalone TS demo at http://localhost:8080
+make marimo      # Reactive marimo dashboard at http://localhost:8080
+make marimo-edit # Interactive marimo notebook editor at http://localhost:8080
 ```
 
 ## Resources
 
 Based on:
 
-1. [Kaggle dataset + notebook](https://www.kaggle.com/code/nishchalchandel/crop-yield-prediction-notebook?select=yield_prediction_dataset.csv)
+1. Kaggle [dataset](./data/inputs/yield_prediction_dataset_raw.csv) + [notebook](./python/notebooks/crop-yield-prediction-notebook.ipynb) from [source](https://www.kaggle.com/code/nishchalchandel/crop-yield-prediction-notebook?select=yield_prediction_dataset.csv)
 2. [Scene grid with isometric projection and Raylib](https://github.com/mstrielnikov/Dunjourno)

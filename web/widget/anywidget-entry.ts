@@ -1,7 +1,7 @@
 // AnyWidget ESM entry: mounts FarmHorizonWidget inside a marimo / Jupyter
 // widget container and keeps it synced with Python traitlets.
 
-import createFarmHorizon from "../../../build-wasm/farmhorizon-single.js";
+import createFarmHorizon from "../../build/wasm/farmhorizon-single.js";
 import { FarmHorizonWidget, type FieldSceneState } from "./farmhorizon-widget";
 
 interface AnyWidgetModel {
