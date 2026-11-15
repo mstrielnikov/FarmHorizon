@@ -94,7 +94,7 @@ def _(
         stop=70,
         step=1,
         value=float(DEFAULT_SCENE_STATE["yieldExt"]),
-        label="Canopy scale",
+        label="Canopy scale (yield)",
         show_value=True,
         full_width=True,
     )
