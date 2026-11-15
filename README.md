@@ -1,13 +1,11 @@
 # FarmHorizon
 
-
 **FarmHorizon** is a real-time isometric crop field and harvester scene renderer with native (Raylib) and WebAssembly (Emscripten/WebGL) targets.<br>
 The renderer is stateless,acting only as a visualization loop with no simulation / decision making within. It expose external parameters from external yield prediction models
 
 ## The model
 
 The source dataset [yield_prediction_dataset_raw.csv](./data/inputs/yield_prediction_dataset_raw.csv)
-
 ...
 
 ### Math
