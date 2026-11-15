@@ -32,16 +32,27 @@ CXXFLAGS := $(CXXSTD) $(WARNINGS) -Os $(INCLUDES) $(RAYLIB_INCLUDES) -DPLATFORM_
 include $(WORKSPACE_ROOT)/lib.mk
 
 # ── Emscripten Linker ────────────────────────────
+# Builds an ES module (createFarmHorizon) that a page instantiates on its own
+# canvas, instead of a full-page HTML shell. ASYNCIFY stays: raylib's web
+# backend calls emscripten_sleep.
+
+WIDGET_EXPORTS := _main,_SetExternalSceneState,_SetTimeOfDay,_SetWidgetSize,_SetWidgetOptions,_SetBackgroundColor
 
 LDFLAGS := -s USE_GLFW=3 \
            -s ASYNCIFY \
-           -s TOTAL_MEMORY=512MB \
-           --shell-file $(RAYLIB_SRC)/shell.html
+           -s INITIAL_MEMORY=32MB \
+           -s ALLOW_MEMORY_GROWTH=1 \
+           -s MODULARIZE=1 \
+           -s EXPORT_ES6=1 \
+           -s EXPORT_NAME=createFarmHorizon \
+           -s ENVIRONMENT=web \
+           -s EXPORTED_FUNCTIONS=$(WIDGET_EXPORTS) \
+           -s EXPORTED_RUNTIME_METHODS=cwrap,ccall
 
 # ── Output ───────────────────────────────────────
 
 OUT_DIR := $(WORKSPACE_ROOT)/build-wasm
-TARGET  := $(OUT_DIR)/index.html
+TARGET  := $(OUT_DIR)/farmhorizon.js
 
 all: $(TARGET)
 
@@ -60,6 +71,7 @@ $(RAYLIB_LIB):
 	$(MAKE) -C $(RAYLIB_SRC) PLATFORM=PLATFORM_WEB -j$$(nproc)
 
 clean:
+	rm -f $(OUT_DIR)/farmhorizon.js $(OUT_DIR)/farmhorizon.wasm
 	rm -f $(OUT_DIR)/index.html $(OUT_DIR)/index.js $(OUT_DIR)/index.wasm $(OUT_DIR)/index.data
 	rm -rf $(OBJ_DIR)
 

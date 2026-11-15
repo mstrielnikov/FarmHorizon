@@ -15,6 +15,14 @@
 
 namespace farmhorizon {
 
+/// Presentation options; the defaults suit the native dev window.
+struct AppOptions {
+    bool  show_controls = true;                 ///< raygui parameter panel
+    bool  show_hud      = true;                 ///< Top status bar
+    float pixel_ratio   = 1.0f;                 ///< Device pixels per logical pixel (HiDPI)
+    Color background    = { 30, 30, 35, 255 };
+};
+
 /**
  * @brief Platform-agnostic application core.
  *
@@ -26,7 +34,8 @@ namespace farmhorizon {
  */
 class App {
 public:
-    bool init(const char* title, int width, int height);
+    /// `width` / `height` are logical pixels; the window gets `pixel_ratio` times more.
+    bool init(const char* title, int width, int height, const AppOptions& options = {});
     void frame();
     void shutdown();
 
@@ -35,6 +44,15 @@ public:
                             int crop_type, float ndvi_index, float yield_ext,
                             float harvested_pct);
 
+    /// Sun angle in hours (6 .. 18).
+    void set_time_of_day(float hours);
+
+    /// Resizes the window / canvas; the field is refitted on the next frame.
+    void resize(int width, int height, float pixel_ratio);
+
+    void set_overlays(bool show_controls, bool show_hud);
+    void set_background(Color color);
+
 private:
     void rebuild_grid();
     void rebuild_mesh();
@@ -42,6 +60,7 @@ private:
     geometry::Viewport scene_viewport() const;
 
     std::unique_ptr<core::FieldGrid> grid_;
+    AppOptions options_;
     core::FieldGridView grid_view_;
     core::FieldState state_;
     core::FieldState last_state_;

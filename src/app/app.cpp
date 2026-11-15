@@ -1,6 +1,7 @@
 #include "farmhorizon/app/app.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <utility>
 
@@ -11,10 +12,13 @@ namespace farmhorizon {
 
 namespace {
 
-constexpr Color kBackground   = { 30, 30, 35, 255 };
-constexpr float kFitPadding   = 16.0f;  ///< Pixels kept free around the fitted field
-constexpr float kPanelGap     = 12.0f;  ///< Gap between the field and the control panel
+constexpr float kFitPadding    = 16.0f;  ///< Logical pixels kept free around the fitted field
+constexpr float kPanelGap      = 12.0f;  ///< Gap between the field and the control panel
 constexpr float kMinSceneWidth = 240.0f; ///< Below this, let the panel overlay the field instead
+
+int to_device_pixels(int logical, float ratio) {
+    return std::max(1, static_cast<int>(std::lround(static_cast<float>(logical) * ratio)));
+}
 
 } // namespace
 
@@ -31,8 +35,35 @@ void App::set_external_state(
     state_.harvested_pct = std::clamp(harvested_pct, 0.0f, 100.0f);
 }
 
-bool App::init(const char* title, int width, int height) {
-    InitWindow(width, height, title);
+void App::set_time_of_day(float hours) {
+    view_.time_of_day = std::clamp(hours, 6.0f, 18.0f);
+}
+
+void App::resize(int width, int height, float pixel_ratio) {
+    options_.pixel_ratio = std::clamp(pixel_ratio, 0.5f, 4.0f);
+    const int w = to_device_pixels(width, options_.pixel_ratio);
+    const int h = to_device_pixels(height, options_.pixel_ratio);
+    if (w != GetScreenWidth() || h != GetScreenHeight()) {
+        SetWindowSize(w, h);
+    }
+    baked_viewport_ = {}; // Pixel ratio may have changed even if the size did not
+}
+
+void App::set_overlays(bool show_controls, bool show_hud) {
+    options_.show_controls = show_controls;
+    options_.show_hud = show_hud;
+}
+
+void App::set_background(Color color) {
+    options_.background = color;
+}
+
+bool App::init(const char* title, int width, int height, const AppOptions& options) {
+    options_ = options;
+    options_.pixel_ratio = std::clamp(options_.pixel_ratio, 0.5f, 4.0f);
+
+    InitWindow(to_device_pixels(width, options_.pixel_ratio),
+               to_device_pixels(height, options_.pixel_ratio), title);
     if (!IsWindowReady()) return false;
 
     gpu_name_ = platform::get_gpu_name(); // Query once, not every frame
@@ -59,14 +90,14 @@ void App::frame() {
     }
 
     BeginDrawing();
-        ClearBackground(kBackground);
+        ClearBackground(options_.background);
 
         // 2. World pass (already fitted to the viewport).
-        renderer_.draw();
+        renderer_.draw(options_.pixel_ratio);
 
-        // 3. Screen-space overlay pass. Field edits take effect on the next frame.
-        ui::draw_hud(state_, gpu_name_.c_str());
-        panel_.draw(state_, view_);
+        // 3. Optional screen-space overlays. Field edits take effect on the next frame.
+        if (options_.show_hud) ui::draw_hud(state_, gpu_name_.c_str());
+        if (options_.show_controls) panel_.draw(state_, view_);
     EndDrawing();
 }
 
@@ -97,18 +128,22 @@ void App::rebuild_mesh() {
 
 // Must run outside BeginDrawing(): baking renders into an off-screen texture.
 void App::bake(const geometry::Viewport& viewport) {
-    renderer_.upload(mesh_, geometry::fit_bounds(mesh_.bounds, viewport, kFitPadding));
+    const float padding = kFitPadding * options_.pixel_ratio;
+    renderer_.upload(mesh_, geometry::fit_bounds(mesh_.bounds, viewport, padding));
     baked_viewport_ = viewport;
 }
 
-/// Free screen area for the field: below the status bar, left of the panel.
+/// Free screen area for the field: below the status bar, left of the panel (when shown).
 geometry::Viewport App::scene_viewport() const {
     const float screen_w = static_cast<float>(GetScreenWidth());
     const float screen_h = static_cast<float>(GetScreenHeight());
-    const float top = static_cast<float>(ui::kHudHeight);
+    const float top = options_.show_hud ? static_cast<float>(ui::kHudHeight) : 0.0f;
 
-    float right = panel_.bounds().x - kPanelGap;
-    if (right < kMinSceneWidth) right = screen_w;
+    float right = screen_w;
+    if (options_.show_controls) {
+        right = panel_.bounds().x - kPanelGap;
+        if (right < kMinSceneWidth) right = screen_w;
+    }
 
     return { 0.0f, top, right, std::max(0.0f, screen_h - top) };
 }
